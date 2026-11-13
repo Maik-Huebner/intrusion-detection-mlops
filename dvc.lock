@@ -1,0 +1,162 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd: python -m ids.pipeline.prepare
+    deps:
+    - path: data/raw/CICIDS2017_improved.zip
+      hash: md5
+      md5: 2934bd5cdf0f8882ce82f83da0a12c79
+      size: 343549013
+    - path: src/ids/pipeline/prepare.py
+      hash: md5
+      md5: 9e0364795f157a745c4161c4002fd964
+      size: 3564
+    - path: src/ids/schema.py
+      hash: md5
+      md5: 8869058a86ea16eeb63be1a016db45e7
+      size: 4108
+    outs:
+    - path: data/interim
+      hash: md5
+      md5: 70b70595979a7175d1dd2b6ade850a1b.dir
+      size: 264874251
+      nfiles: 5
+    - path: reports/prepare.json
+      hash: md5
+      md5: 1ca572af7a5ac3ca1cf792ae63217c41
+      size: 1616
+  validate:
+    cmd: python -m ids.pipeline.validate
+    deps:
+    - path: data/interim
+      hash: md5
+      md5: 70b70595979a7175d1dd2b6ade850a1b.dir
+      size: 264874251
+      nfiles: 5
+    - path: src/ids/pipeline/validate.py
+      hash: md5
+      md5: 00944edf212e933c3d960dd9fcff6dc0
+      size: 2480
+    - path: src/ids/schema.py
+      hash: md5
+      md5: 8869058a86ea16eeb63be1a016db45e7
+      size: 4108
+    outs:
+    - path: reports/validate.json
+      hash: md5
+      md5: b2cae06fa2c2c724d1f4f09099a437ec
+      size: 369
+  split:
+    cmd: python -m ids.pipeline.split
+    deps:
+    - path: data/interim
+      hash: md5
+      md5: 70b70595979a7175d1dd2b6ade850a1b.dir
+      size: 264874251
+      nfiles: 5
+    - path: reports/validate.json
+      hash: md5
+      md5: b2cae06fa2c2c724d1f4f09099a437ec
+      size: 369
+    - path: src/ids/pipeline/split.py
+      hash: md5
+      md5: 4d4f156b37c19dd8902ad8397195c78f
+      size: 2440
+    params:
+      params.yaml:
+        split:
+          train_days:
+          - monday
+          - tuesday
+          - wednesday
+          future_days:
+          - thursday
+          - friday
+          test_size: 0.2
+          random_state: 42
+    outs:
+    - path: data/prepared
+      hash: md5
+      md5: e26b56bb8357bbe40de5399eed2d240a.dir
+      size: 264562895
+      nfiles: 3
+    - path: reports/split.json
+      hash: md5
+      md5: dac209ef390cffe5871b2f94412addca
+      size: 756
+  train:
+    cmd: python -m ids.pipeline.train
+    deps:
+    - path: data/prepared/train.parquet
+      hash: md5
+      md5: 57b5ff252c33c5828e3fe14e2ed0cae2
+      size: 125337531
+    - path: src/ids/pipeline/train.py
+      hash: md5
+      md5: c5a485e4bb7f78c3eb612a72fcd68aff
+      size: 1354
+    params:
+      params.yaml:
+        train:
+          max_iter: 200
+          learning_rate: 0.1
+          max_leaf_nodes: 31
+          l2_regularization: 0.0
+          random_state: 42
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: c470143a1a60a07be12904f3e153cedb
+      size: 717008
+  evaluate:
+    cmd: python -m ids.pipeline.evaluate
+    deps:
+    - path: data/prepared/future.parquet
+      hash: md5
+      md5: 2bb81d346a370c758f71b7a08228cd3e
+      size: 106312061
+    - path: data/prepared/test.parquet
+      hash: md5
+      md5: 397049a6431d29c962dbf56d8fafa064
+      size: 32913303
+    - path: models/model.joblib
+      hash: md5
+      md5: c470143a1a60a07be12904f3e153cedb
+      size: 717008
+    - path: src/ids/metrics.py
+      hash: md5
+      md5: f5dd77497969bedc9a24bf77602221c5
+      size: 2514
+    - path: src/ids/pipeline/evaluate.py
+      hash: md5
+      md5: 184ffc4439cdf632bb9b2ae7d3bed12b
+      size: 2127
+    params:
+      params.yaml:
+        evaluate:
+          threshold: 0.5
+    outs:
+    - path: metrics.json
+      hash: md5
+      md5: 8b7b1ab92b4a4cc515c24c438f09205c
+      size: 812
+    - path: reports/detection.json
+      hash: md5
+      md5: 98fe6b72438695af0b37392a1812c2d2
+      size: 4700
+  plots:
+    cmd: python -m ids.pipeline.plots
+    deps:
+    - path: reports/detection.json
+      hash: md5
+      md5: 98fe6b72438695af0b37392a1812c2d2
+      size: 4700
+    - path: src/ids/pipeline/plots.py
+      hash: md5
+      md5: be964644cb16ceecd686c5fc84ed8199
+      size: 2644
+    outs:
+    - path: reports/detection_by_attack.svg
+      hash: md5
+      md5: 25019318e955de28c3807ead9af33a7e
+      size: 16942

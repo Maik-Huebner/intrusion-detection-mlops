@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# uv virtual environment (recreate with `uv sync`)
+.venv/
+
+# MLflow local tracking data
+mlflow.db
+mlruns/
+mlartifacts/
+
+# Secrets
+.env
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+
+# Data and models are versioned by DVC, not Git:
+# raw data via data/raw/*.dvc, pipeline outputs via dvc.lock (DVC adds its own .gitignore entries).
+
+# Batch prediction output (reproducible at any time)
+output/

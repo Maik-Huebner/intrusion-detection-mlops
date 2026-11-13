@@ -1,0 +1,246 @@
+{
+  "future": {
+    "by_category": {
+      "Benign": {
+        "correct": 582521,
+        "flows": 582524,
+        "share": 1.0
+      },
+      "Botnet": {
+        "correct": 0,
+        "flows": 736,
+        "share": 0.0
+      },
+      "DDoS": {
+        "correct": 94949,
+        "flows": 95144,
+        "share": 0.998
+      },
+      "Infiltration": {
+        "correct": 0,
+        "flows": 71798,
+        "share": 0.0
+      },
+      "PortScan": {
+        "correct": 84,
+        "flows": 159066,
+        "share": 0.0005
+      },
+      "Web Attack": {
+        "correct": 0,
+        "flows": 104,
+        "share": 0.0
+      }
+    },
+    "by_label": {
+      "BENIGN": {
+        "correct": 582521,
+        "flows": 582524,
+        "share": 1.0
+      },
+      "Botnet": {
+        "correct": 0,
+        "flows": 736,
+        "share": 0.0
+      },
+      "DDoS": {
+        "correct": 94949,
+        "flows": 95144,
+        "share": 0.998
+      },
+      "Infiltration": {
+        "correct": 0,
+        "flows": 31,
+        "share": 0.0
+      },
+      "Infiltration - Portscan": {
+        "correct": 0,
+        "flows": 71767,
+        "share": 0.0
+      },
+      "Portscan": {
+        "correct": 84,
+        "flows": 159066,
+        "share": 0.0005
+      },
+      "Web Attack - Brute Force": {
+        "correct": 0,
+        "flows": 73,
+        "share": 0.0
+      },
+      "Web Attack - SQL Injection": {
+        "correct": 0,
+        "flows": 13,
+        "share": 0.0
+      },
+      "Web Attack - XSS": {
+        "correct": 0,
+        "flows": 18,
+        "share": 0.0
+      }
+    }
+  },
+  "future_friday": {
+    "by_category": {
+      "Benign": {
+        "correct": 292505,
+        "flows": 292506,
+        "share": 1.0
+      },
+      "Botnet": {
+        "correct": 0,
+        "flows": 736,
+        "share": 0.0
+      },
+      "DDoS": {
+        "correct": 94949,
+        "flows": 95144,
+        "share": 0.998
+      },
+      "PortScan": {
+        "correct": 84,
+        "flows": 159066,
+        "share": 0.0005
+      }
+    },
+    "by_label": {
+      "BENIGN": {
+        "correct": 292505,
+        "flows": 292506,
+        "share": 1.0
+      },
+      "Botnet": {
+        "correct": 0,
+        "flows": 736,
+        "share": 0.0
+      },
+      "DDoS": {
+        "correct": 94949,
+        "flows": 95144,
+        "share": 0.998
+      },
+      "Portscan": {
+        "correct": 84,
+        "flows": 159066,
+        "share": 0.0005
+      }
+    }
+  },
+  "future_thursday": {
+    "by_category": {
+      "Benign": {
+        "correct": 290016,
+        "flows": 290018,
+        "share": 1.0
+      },
+      "Infiltration": {
+        "correct": 0,
+        "flows": 71798,
+        "share": 0.0
+      },
+      "Web Attack": {
+        "correct": 0,
+        "flows": 104,
+        "share": 0.0
+      }
+    },
+    "by_label": {
+      "BENIGN": {
+        "correct": 290016,
+        "flows": 290018,
+        "share": 1.0
+      },
+      "Infiltration": {
+        "correct": 0,
+        "flows": 31,
+        "share": 0.0
+      },
+      "Infiltration - Portscan": {
+        "correct": 0,
+        "flows": 71767,
+        "share": 0.0
+      },
+      "Web Attack - Brute Force": {
+        "correct": 0,
+        "flows": 73,
+        "share": 0.0
+      },
+      "Web Attack - SQL Injection": {
+        "correct": 0,
+        "flows": 13,
+        "share": 0.0
+      },
+      "Web Attack - XSS": {
+        "correct": 0,
+        "flows": 18,
+        "share": 0.0
+      }
+    }
+  },
+  "test": {
+    "by_category": {
+      "Benign": {
+        "correct": 185826,
+        "flows": 185826,
+        "share": 1.0
+      },
+      "Brute Force": {
+        "correct": 1386,
+        "flows": 1386,
+        "share": 1.0
+      },
+      "DoS": {
+        "correct": 34326,
+        "flows": 34327,
+        "share": 1.0
+      },
+      "Heartbleed": {
+        "correct": 2,
+        "flows": 2,
+        "share": 1.0
+      }
+    },
+    "by_label": {
+      "BENIGN": {
+        "correct": 185826,
+        "flows": 185826,
+        "share": 1.0
+      },
+      "DoS GoldenEye": {
+        "correct": 1513,
+        "flows": 1513,
+        "share": 1.0
+      },
+      "DoS Hulk": {
+        "correct": 31694,
+        "flows": 31694,
+        "share": 1.0
+      },
+      "DoS Slowhttptest": {
+        "correct": 348,
+        "flows": 348,
+        "share": 1.0
+      },
+      "DoS Slowloris": {
+        "correct": 771,
+        "flows": 772,
+        "share": 0.9987
+      },
+      "FTP-Patator": {
+        "correct": 794,
+        "flows": 794,
+        "share": 1.0
+      },
+      "Heartbleed": {
+        "correct": 2,
+        "flows": 2,
+        "share": 1.0
+      },
+      "SSH-Patator": {
+        "correct": 592,
+        "flows": 592,
+        "share": 1.0
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "friday": {
+    "attacks": 254946,
+    "attempted_relabelled_benign": 4067,
+    "dropped_header_overflow": 105,
+    "dropped_non_finite": 0,
+    "labels": {
+      "BENIGN": 292506,
+      "Botnet": 736,
+      "DDoS": 95144,
+      "Portscan": 159066
+    },
+    "rows": 547452,
+    "rows_raw": 547557
+  },
+  "monday": {
+    "attacks": 0,
+    "attempted_relabelled_benign": 0,
+    "dropped_header_overflow": 105,
+    "dropped_non_finite": 3,
+    "labels": {
+      "BENIGN": 371516
+    },
+    "rows": 371516,
+    "rows_raw": 371624
+  },
+  "thursday": {
+    "attacks": 71902,
+    "attempted_relabelled_benign": 1997,
+    "dropped_header_overflow": 155,
+    "dropped_non_finite": 1,
+    "labels": {
+      "BENIGN": 290018,
+      "Infiltration": 31,
+      "Infiltration - Portscan": 71767,
+      "Web Attack - Brute Force": 73,
+      "Web Attack - SQL Injection": 13,
+      "Web Attack - XSS": 18
+    },
+    "rows": 361920,
+    "rows_raw": 362076
+  },
+  "tuesday": {
+    "attacks": 6933,
+    "attempted_relabelled_benign": 39,
+    "dropped_header_overflow": 115,
+    "dropped_non_finite": 0,
+    "labels": {
+      "BENIGN": 315030,
+      "FTP-Patator": 3972,
+      "SSH-Patator": 2961
+    },
+    "rows": 321963,
+    "rows_raw": 322078
+  },
+  "wednesday": {
+    "attacks": 171642,
+    "attempted_relabelled_benign": 5876,
+    "dropped_header_overflow": 113,
+    "dropped_non_finite": 1,
+    "labels": {
+      "BENIGN": 324885,
+      "DoS GoldenEye": 7567,
+      "DoS Hulk": 158468,
+      "DoS Slowhttptest": 1740,
+      "DoS Slowloris": 3859,
+      "Heartbleed": 8
+    },
+    "rows": 496527,
+    "rows_raw": 496641
+  }
+}

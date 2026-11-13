@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Every Monday 06:17 Berlin time: catches breaking upstream changes and keeps the data cache warm.
+    - cron: "17 6 * * 1"
+      timezone: "Europe/Berlin"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DVC_NO_ANALYTICS: "1"
+  MLFLOW_DISABLE_TELEMETRY: "true"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          cache-suffix: lint
+      - run: uv sync --locked --no-default-groups --group lint
+      - name: ruff check
+        run: uv run --no-sync ruff check --output-format=github .
+      - name: ruff format
+        run: uv run --no-sync ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --no-default-groups --group test --group api
+      - name: Unit tests
+        run: uv run --no-sync pytest -v
+
+  pipeline:
+    # End to end: only when lint and tests are green, CI rebuilds the model from the raw data.
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          cache-suffix: pipeline
+      - run: uv sync --locked --no-default-groups --group pipeline
+
+      - name: Cache raw data
+        # 328 MB from the dataset authors' server: download once, then reuse.
+        # The key changes only when the expected checksum in download.py changes.
+        uses: actions/cache@v6
+        with:
+          path: data/raw/CICIDS2017_improved.zip
+          key: raw-data-${{ hashFiles('src/ids/data/download.py') }}
+
+      - name: Download and verify raw data
+        run: uv run --no-sync python -m ids.data.download
+
+      - name: Run pipeline
+        run: uv run --no-sync dvc repro --force
+
+      - name: Check reproducibility
+        # Same code + same data + same params must give the same results on any machine.
+        run: git diff --exit-code metrics.json reports/
+
+      - name: Quality gate
+        run: uv run --no-sync python -m ids.quality_gate
+
+      - name: Metrics to job summary
+        run: |
+          echo "## Metrics" >> "$GITHUB_STEP_SUMMARY"
+          uv run --no-sync dvc metrics show --md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload model
+        uses: actions/upload-artifact@v7
+        with:
+          name: model-${{ github.sha }}
+          path: |
+            models/model.joblib
+            metrics.json
+            reports/
+          retention-days: 30

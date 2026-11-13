@@ -1,0 +1,73 @@
+# prepare -> validate -> split -> train -> evaluate -> plots
+# Run with: uv run dvc repro
+
+stages:
+  prepare:
+    cmd: python -m ids.pipeline.prepare
+    deps:
+      - src/ids/pipeline/prepare.py
+      - src/ids/schema.py
+      - data/raw/CICIDS2017_improved.zip
+    outs:
+      - data/interim
+      - reports/prepare.json:
+          cache: false
+
+  validate:
+    cmd: python -m ids.pipeline.validate
+    deps:
+      - src/ids/pipeline/validate.py
+      - src/ids/schema.py
+      - data/interim
+    outs:
+      - reports/validate.json:
+          cache: false
+
+  split:
+    cmd: python -m ids.pipeline.split
+    deps:
+      - src/ids/pipeline/split.py
+      - data/interim
+      - reports/validate.json  # only split data that passed validation
+    params:
+      - split
+    outs:
+      - data/prepared
+      - reports/split.json:
+          cache: false
+
+  train:
+    cmd: python -m ids.pipeline.train
+    deps:
+      - src/ids/pipeline/train.py
+      - data/prepared/train.parquet
+    params:
+      - train
+    outs:
+      - models/model.joblib
+
+  evaluate:
+    cmd: python -m ids.pipeline.evaluate
+    deps:
+      - src/ids/pipeline/evaluate.py
+      - src/ids/metrics.py
+      - data/prepared/test.parquet
+      - data/prepared/future.parquet
+      - models/model.joblib
+    params:
+      - evaluate
+    metrics:
+      - metrics.json:
+          cache: false
+    outs:
+      - reports/detection.json:
+          cache: false
+
+  plots:
+    cmd: python -m ids.pipeline.plots
+    deps:
+      - src/ids/pipeline/plots.py
+      - reports/detection.json
+    outs:
+      - reports/detection_by_attack.svg:
+          cache: false

@@ -1,0 +1,46 @@
+{
+  "duplicates_removed": 82303,
+  "future": {
+    "categories": {
+      "Benign": 582524,
+      "Botnet": 736,
+      "DDoS": 95144,
+      "Infiltration": 71798,
+      "PortScan": 159066,
+      "Web Attack": 104
+    },
+    "days": [
+      "friday",
+      "thursday"
+    ],
+    "rows": 909372
+  },
+  "test": {
+    "categories": {
+      "Benign": 185826,
+      "Brute Force": 1386,
+      "DoS": 34327,
+      "Heartbleed": 2
+    },
+    "days": [
+      "monday",
+      "tuesday",
+      "wednesday"
+    ],
+    "rows": 221541
+  },
+  "train": {
+    "categories": {
+      "Benign": 743302,
+      "Brute Force": 5547,
+      "DoS": 137307,
+      "Heartbleed": 6
+    },
+    "days": [
+      "monday",
+      "tuesday",
+      "wednesday"
+    ],
+    "rows": 886162
+  }
+}

@@ -1,0 +1,5 @@
+outs:
+- md5: 2934bd5cdf0f8882ce82f83da0a12c79
+  size: 343549013
+  hash: md5
+  path: CICIDS2017_improved.zip

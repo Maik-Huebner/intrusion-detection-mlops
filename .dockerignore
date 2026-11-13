@@ -1,0 +1,17 @@
+# Keep the build context small: only what the images need.
+.git
+.github
+.venv
+.dvc/cache
+.dvc/tmp
+.pytest_cache
+.ruff_cache
+**/__pycache__
+data
+mlruns
+mlartifacts
+mlflow.db
+notebooks
+reports
+tests
+docs

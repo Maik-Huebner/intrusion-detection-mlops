@@ -1,0 +1,64 @@
+[project]
+name = "intrusion-detection-mlops"
+version = "0.1.0"
+description = "Network intrusion detection on the corrected CIC-IDS2017 dataset, with an end-to-end MLOps lifecycle: DVC, MLflow, FastAPI, Docker and GitHub Actions."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Maik Hübner" }]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy==2.5.4",
+    "pandas==3.1.0",
+    "pyarrow==25.0.1",
+    "pyyaml==6.0.3",
+    "scikit-learn==1.9.1",
+]
+
+[dependency-groups]
+# Groups keep CI jobs lean: each job installs only what it needs (uv sync --only-group / --group).
+test = [
+    "pytest==9.2.0",
+    "httpx2==2.16.0",  # FastAPI TestClient backend
+]
+lint = [
+    "ruff==0.17.5",
+]
+pipeline = [
+    "dvc==3.67.1",
+    "matplotlib==3.11.2",
+]
+tracking = [
+    "mlflow==3.17.2",
+]
+api = [
+    "fastapi==0.162.0",
+    "uvicorn==0.54.0",
+]
+notebook = [
+    "ipykernel==7.4.0",
+    "matplotlib==3.11.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv]
+default-groups = "all"
+
+[tool.uv.build-backend]
+module-name = "ids"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "data: needs the prepared dataset (run `dvc repro` first)",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "N", "PD", "NPY"]

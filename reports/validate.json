@@ -1,0 +1,27 @@
+{
+  "friday": {
+    "errors": [],
+    "ok": true,
+    "rows": 547452
+  },
+  "monday": {
+    "errors": [],
+    "ok": true,
+    "rows": 371516
+  },
+  "thursday": {
+    "errors": [],
+    "ok": true,
+    "rows": 361920
+  },
+  "tuesday": {
+    "errors": [],
+    "ok": true,
+    "rows": 321963
+  },
+  "wednesday": {
+    "errors": [],
+    "ok": true,
+    "rows": 496527
+  }
+}

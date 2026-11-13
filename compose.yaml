@@ -1,0 +1,36 @@
+# Local stack: MLflow tracking server + scoring API.
+#   docker compose up -d --build
+# MLflow UI: http://localhost:5050   API docs: http://localhost:8000/docs
+
+services:
+  mlflow:
+    build: docker/mlflow
+    image: ids-mlflow:3.17.2
+    ports:
+      # Localhost only. macOS AirPlay occupies port 5000, hence 5050 by default.
+      - "127.0.0.1:${MLFLOW_PORT:-5050}:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: ids-api:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # Uncomment to serve the registry champion instead of the baked-in model:
+      # MODEL_URI: models:/ids-detector@champion
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    restart: unless-stopped
+
+volumes:
+  mlflow-data:
+    name: ids-mlflow-data

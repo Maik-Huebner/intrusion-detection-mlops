@@ -1,0 +1,42 @@
+{
+  "future": {
+    "alarms": 95036,
+    "attacks": 326848,
+    "detection_rate": 0.2908,
+    "f1": 0.4505,
+    "false_alarm_rate": 0.0,
+    "flows": 909372,
+    "pr_auc": 0.8753,
+    "precision": 1.0
+  },
+  "future_friday": {
+    "alarms": 95034,
+    "attacks": 254946,
+    "detection_rate": 0.3728,
+    "f1": 0.5431,
+    "false_alarm_rate": 0.0,
+    "flows": 547452,
+    "pr_auc": 0.9528,
+    "precision": 1.0
+  },
+  "future_thursday": {
+    "alarms": 2,
+    "attacks": 71902,
+    "detection_rate": 0.0,
+    "f1": 0.0,
+    "false_alarm_rate": 0.0,
+    "flows": 361920,
+    "pr_auc": 0.4226,
+    "precision": 0.0
+  },
+  "test": {
+    "alarms": 35714,
+    "attacks": 35715,
+    "detection_rate": 1.0,
+    "f1": 1.0,
+    "false_alarm_rate": 0.0,
+    "flows": 221541,
+    "pr_auc": 1.0,
+    "precision": 1.0
+  }
+}
