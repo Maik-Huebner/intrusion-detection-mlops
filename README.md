@@ -37,6 +37,14 @@ Das ist **Concept Drift**, und genau dafür braucht es MLOps: Nach dem Retrainin
 Donnerstagsdaten steigt die Erkennung am Freitag von **37,3 % auf 99,1 %** (PortScan: 0,05 % → 99,2 %).
 Botnet bleibt bei 1,9 %: Retraining hilft nur gegen Angriffe, die schon einmal gelabelt vorkamen.
 
+Das Retraining ist ein DVC-Experiment. Ein Befehl reproduziert es, ohne den Code anzufassen:
+
+```bash
+uv run dvc exp run -n phase2-retrain-with-thursday \
+  -S 'split.train_days=[monday,tuesday,wednesday,thursday]' -S 'split.future_days=[friday]'
+uv run dvc exp show --only-changed
+```
+
 ## Warum MLOps gerade in der Cybersecurity?
 
 Angreifer ändern ständig ihre Methoden. Ein Modell, das heute fast alle Angriffe findet, kann morgen
