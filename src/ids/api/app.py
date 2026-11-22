@@ -29,9 +29,9 @@ state: dict = {}
 
 def _load_model():
     if uri := os.getenv("MODEL_URI"):
-        import mlflow  # only needed when serving from the registry
+        from ids.registry import load_registered_model  # needs the tracking group (mlflow)
 
-        return mlflow.sklearn.load_model(uri), uri
+        return load_registered_model(uri), uri
     path = Path(os.getenv("MODEL_PATH", str(MODEL_FILE)))
     return joblib.load(path), str(path)
 

@@ -35,13 +35,18 @@ def download(url: str, target: Path) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "intrusion-detection-mlops"})
     with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as fh:
         total = int(response.headers.get("Content-Length", 0))
-        done = 0
+        done, reported = 0, -1
+        interactive = sys.stdout.isatty()  # live progress in a terminal, 10 % steps in CI logs
         while block := response.read(CHUNK):
             fh.write(block)
             done += len(block)
-            if total:
+            if total and interactive:
                 print(f"\r  {done / 1e6:7.1f} / {total / 1e6:.1f} MB", end="", flush=True)
-    print()
+            elif total and (step := 10 * done // total) > reported:
+                reported = step
+                print(f"  {done / 1e6:7.1f} / {total / 1e6:.1f} MB", flush=True)
+    if interactive:
+        print()
     partial.replace(target)  # atomic: the target never exists half-written
 
 

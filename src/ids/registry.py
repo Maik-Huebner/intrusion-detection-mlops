@@ -39,6 +39,17 @@ CHAMPION, CHALLENGER = "champion", "challenger"
 # The challenger must beat the champion's F1 by at least this margin to replace it.
 MIN_IMPROVEMENT = 0.005
 
+# MLflow stores scikit-learn models with skops instead of pickle: loading a skops file cannot run
+# arbitrary code, only types on an allow-list are rebuilt. Gradient boosting needs exactly one type
+# beyond the skops defaults, so we trust that one and nothing else.
+SKOPS_TRUSTED_TYPES = ["sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor"]
+
+
+def load_registered_model(model_uri: str):
+    """Load a model from *our own* registry. MLflow refuses any deserialisation unless explicitly allowed."""
+    os.environ.setdefault("MLFLOW_ALLOW_PICKLE_DESERIALIZATION", "true")
+    return mlflow.sklearn.load_model(model_uri)
+
 
 def _client() -> MlflowClient:
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
@@ -64,7 +75,9 @@ def log_run() -> str:
 
         model = joblib.load(MODEL_FILE)
         example = pd.read_parquet(PREPARED_DIR / "test.parquet").head(5)[schema.FEATURES]
-        info = mlflow.sklearn.log_model(sk_model=model, name="model", input_example=example)
+        info = mlflow.sklearn.log_model(
+            sk_model=model, name="model", input_example=example, skops_trusted_types=SKOPS_TRUSTED_TYPES
+        )
 
     version = mlflow.register_model(info.model_uri, MODEL_NAME).version
     client.set_model_version_tag(MODEL_NAME, version, "run_id", run.info.run_id)
@@ -75,7 +88,7 @@ def log_run() -> str:
 def _f1_on_recent_data(model_uri: str) -> float | None:
     """F1 of a registered model on the newest labelled data (the current test set)."""
     test = pd.read_parquet(PREPARED_DIR / "test.parquet")
-    scores = mlflow.sklearn.load_model(model_uri).predict_proba(test[schema.FEATURES])[:, 1]
+    scores = load_registered_model(model_uri).predict_proba(test[schema.FEATURES])[:, 1]
     return detection_metrics(test[schema.TARGET], scores, load_params("evaluate")["threshold"])["f1"]
 
 
@@ -94,6 +107,7 @@ def promote() -> None:
         champion = client.get_model_version_by_alias(MODEL_NAME, CHAMPION)
     except MlflowException:
         client.set_registered_model_alias(MODEL_NAME, CHAMPION, newest.version)
+        client.delete_registered_model_alias(MODEL_NAME, CHALLENGER)
         print(f"no champion yet -> version {newest.version} is now @{CHAMPION}")
         return
 

@@ -52,7 +52,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --locked --no-default-groups --group test --group api
+      - run: uv sync --locked --no-default-groups --group test --group api --group tracking
       - name: Unit tests
         run: uv run --no-sync pytest -v
 
