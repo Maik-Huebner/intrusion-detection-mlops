@@ -1,0 +1,51 @@
+{
+  "duration_s": 178,
+  "examples": [
+    {
+      "note": "Ein DoS-Angriff mit der Familie DoS, bekannt als DoS Hulk, wurde erkannt, wobei sich die Packet-Länge-Variante stark von dem normalen Verkehr unterscheidet. Die beiden auffälligsten Merkmale sind die Packet-Länge-Variante mit 5.036.056 und die Bwd Packet Length Max mit 7.240, die deutlich außerhalb des normalen Bereichs liegen. Der Analyst sollte die Netzwerkverbindung auf weitere Angriffssignale überprüfen, um die Auswirkungen des Angriffs zu bestimmen.",
+      "source": "llm",
+      "type": "DoS Hulk"
+    },
+    {
+      "note": "Ein DoS-Angriff mit der Familie DoS, bekannt als DoS Hulk, wurde erkannt, wobei die Durchsatzrate im Backwarden (Bwd) bei 46.566.264 Bites pro Sekunde deutlich über dem normalen Bereich liegt. Die Packet-Größen-Variante und der Durchsatz von Bytes pro Bulk-Avg sind ebenfalls auffällig. Der Analyst sollte die Angriffsquellen und die Netzwerkkomponenten überprüfen, um die Auswirkungen des Angriffs besser zu verstehen.",
+      "source": "llm",
+      "type": "DoS Hulk"
+    },
+    {
+      "note": "Ein DoS-Angriff mit 100% Wahrscheinlichkeit wurde erkannt, der DoS Hulk (Familie DoS) greift den Zielport 80 über Protokoll 6 an. Die auffälligsten Merkmale sind eine übermäßige Bulk-Rate (24.106.028) und eine ungewöhnliche Packet-Length-Variante (2.210.208), was auf eine intensivere Angriffsstrategie hinweist. Der Analyst sollte die Details des Angriffs überprüfen, um sicherzustellen, dass keine anderen Angriffsmethoden oder Sicherheitslücken übersehen werden.",
+      "source": "llm",
+      "type": "DoS Hulk"
+    },
+    {
+      "note": "Alarm: DoS Hulk (Familie DoS), Wahrscheinlichkeit 100%, Zielport 80. Auffällig: Packet Length Variance, Bwd Packet Length Std, Bwd Packet Length Max. Nächster Schritt: Quelle und weitere Verbindungen im selben Zeitraum prüfen.",
+      "source": "fallback",
+      "type": "DoS Hulk"
+    },
+    {
+      "note": "Ein DoS GoldenEye-Angriff mit hoher Wahrscheinlichkeit wurde erkannt, der sich durch einen hohen Bulk-Rate und ho Aktivität auszeichnet. Der Bwd Bulk Rate Avg liegt bei 39.297.296, während der normalen normale Bereich liegt. Der Analyst sollte die Details des Angriffs überprüfen, um sicherzustellen, dass es sich tatsächlich um einen DoS GoldenEye-Angriff handelt und keine andere Art von Angriff ist.",
+      "source": "llm",
+      "type": "DoS GoldenEye"
+    },
+    {
+      "note": "Angriff mit hoher Wahrscheinlichkeit bestätigt, es handelt sich um einen DoS GoldenEye-Angriff. Die beiden auffälligsten Merkmale sind der Idle-Standard von 54.593.404 und der Flow-IAT-Max von 100.497.280, die deutlich über dem normalen Bereich liegen. Als Nächstes sollte der Analyst die Netzwerkverbindung überprüfen, um sicherzustellen, dass keine anderen Angriffe oder Sicherheitslücken entdeckt werden können.",
+      "source": "llm",
+      "type": "DoS GoldenEye"
+    }
+  ],
+  "explained": 26,
+  "failed_rules": {
+    "names_attack_type": 1
+  },
+  "fallback_reasons": {
+    "APITimeoutError": 1,
+    "rules": 1
+  },
+  "flows": 26,
+  "latency_p50_s": 4.38,
+  "latency_p95_s": 8.61,
+  "llm_model": "llama3.2:3b",
+  "prompt_version": "v2",
+  "rule_pass_rate": 0.9231,
+  "rules_version": "r2",
+  "type_correct_rate": 1.0
+}

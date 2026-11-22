@@ -221,7 +221,7 @@ def fake_llm(monkeypatch, answer=None, error=None):
     def generate(ctx):
         if error:
             raise error
-        return {"text": answer, "llm_model": "fake", "tokens": 42, "seconds": 0.1}
+        return {"text": answer, "llm_model": "fake", "prompt_version": "v2", "tokens": 42, "seconds": 0.1}
 
     monkeypatch.setattr(llm, "generate", generate)
 

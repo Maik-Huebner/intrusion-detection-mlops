@@ -48,10 +48,27 @@ def test_invented_identifiers_are_rejected():
         assert llm.check_rules(f"{GOOD} {bad}", CTX)["no_invented_identifiers"] is False
 
 
-def test_drift_warning_must_be_kept():
-    ctx = CTX | {"drift_warning": True}
-    assert llm.check_rules(GOOD, ctx)["keeps_drift_warning"] is False
-    assert llm.check_rules(GOOD + " Achtung: Drift im Verkehr.", ctx)["keeps_drift_warning"] is True
+def test_drift_only_when_warned():
+    warned = CTX | {"drift_warning": True}
+    assert llm.check_rules(GOOD, warned)["drift_only_when_warned"] is False
+    assert llm.check_rules(GOOD + " Achtung, Drift: Zuordnung unsicher.", warned)["drift_only_when_warned"]
+    # v1 wrote "Drift" without any warning - a false alarm in words
+    assert llm.check_rules(GOOD + " Drift prüfen.", CTX)["drift_only_when_warned"] is False
+
+
+def test_preamble_and_quotes_are_rejected_and_cleaned():
+    raw = 'Hier ist die Notiz für den Analysten:\n\n"' + GOOD + '"'
+    assert llm.check_rules(raw, CTX)["no_preamble"] is False
+    assert llm.clean(raw) == GOOD
+    assert llm.check_rules(llm.clean(raw), CTX)["no_preamble"] is True
+
+
+def test_v2_prompt_mentions_drift_only_with_a_warning(monkeypatch):
+    monkeypatch.delenv("LLM_PROMPT_VERSION", raising=False)
+    assert "Drift" not in llm.system_prompt(CTX)
+    assert "Drift" in llm.system_prompt(CTX | {"drift_warning": True})
+    monkeypatch.setenv("LLM_PROMPT_VERSION", "v1")
+    assert llm.system_prompt(CTX) == llm.SYSTEM_PROMPT_V1
 
 
 def test_long_notes_are_rejected():

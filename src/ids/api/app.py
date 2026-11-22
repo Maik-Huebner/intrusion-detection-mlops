@@ -242,8 +242,9 @@ def explain(flow: Flow) -> Explanation:  # type: ignore[valid-type]
     rules = llm.check_rules(answer["text"], ctx)
     if not all(rules.values()):
         m.LLM_REQUESTS.labels("rejected").inc()
+        fallback["prompt_version"] = answer["prompt_version"]  # the template replaced this prompt's note
         return Explanation(**base, **fallback, reason="rules", rules=rules, llm_model=answer["llm_model"],
                            seconds=answer["seconds"])  # fmt: skip
     m.LLM_REQUESTS.labels("ok").inc()
     return Explanation(**base, note=answer["text"], source="llm", rules=rules, llm_model=answer["llm_model"],
-                       prompt_version=llm.PROMPT_VERSION, seconds=answer["seconds"])  # fmt: skip
+                       prompt_version=answer["prompt_version"], seconds=answer["seconds"])  # fmt: skip

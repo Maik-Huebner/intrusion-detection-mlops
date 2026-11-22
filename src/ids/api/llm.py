@@ -12,15 +12,23 @@ Configuration (OpenAI-compatible endpoint, e.g. Ollama in the compose stack):
 * ``LLM_MODEL``     default ``llama3.2:3b``
 * ``LLM_API_KEY``   Ollama ignores it, the openai package requires one (default ``ollama``)
 * ``LLM_TIMEOUT``   seconds, default 60
+* ``LLM_PROMPT_VERSION`` ``v2`` (default) or ``v1``, to compare prompts in the evaluation
+
+Prompt history (measured with ``ids.evaluate_llm``, rules r2):
+
+* v1: every note started with "Hier ist die Notiz ..." in quotes, and llama3.2:3b mentioned "Drift"
+  even without a warning - it echoed the word from the system prompt.
+* v2: the drift instruction is only in the prompt when there is a warning; no preamble, no quotes;
+  a deterministic cleanup removes a preamble the model writes anyway.
 """
 
 import os
 import re
 import time
 
-PROMPT_VERSION = "v1"
+RULES_VERSION = "r2"
 
-SYSTEM_PROMPT = (
+SYSTEM_PROMPT_V1 = (
     "Du bist Assistent in einem Security Operations Center (SOC). "
     "Zwei Machine-Learning-Modelle haben eine Netzwerkverbindung (Flow) bewertet. "
     "Schreibe für einen Analysten eine kurze Notiz auf Deutsch, höchstens drei Sätze: "
@@ -29,6 +37,41 @@ SYSTEM_PROMPT = (
     "Erfinde keine IP-Adressen, Hostnamen, CVE-Nummern oder Messwerte; nutze nur die Werte aus dem Text. "
     "Steht im Text eine Warnung zum Drift, übernimm sie mit dem Wort 'Drift'."
 )
+
+_V2_BASE = (
+    "Du bist Assistent in einem Security Operations Center (SOC). "
+    "Zwei Machine-Learning-Modelle haben eine Netzwerkverbindung (Flow) bewertet. "
+    "Schreibe für einen Analysten eine Notiz auf Deutsch in genau drei kurzen Sätzen: "
+    "1. was erkannt wurde, 2. welche zwei Merkmale am meisten auffallen, mit Wert und normalem Bereich, "
+    "3. was der Analyst als Nächstes prüfen sollte. "
+    "Nenne den Angriffstyp genau so, wie er im Text steht, und keine andere Angriffsart. "
+    "Erfinde keine IP-Adressen, Hostnamen, CVE-Nummern oder Messwerte. "
+    "Antworte nur mit den drei Sätzen: keine Einleitung, keine Überschrift, keine Anführungszeichen."
+)
+_V2_DRIFT = (
+    " Der Text enthält eine Warnung des Drift-Monitors: Beginne den dritten Satz mit 'Achtung, Drift:' "
+    "und schreibe, dass die Zuordnung falsch sein kann."
+)
+
+
+def prompt_version() -> str:
+    return os.getenv("LLM_PROMPT_VERSION", "v2")
+
+
+def system_prompt(ctx: dict) -> str:
+    if prompt_version() == "v1":
+        return SYSTEM_PROMPT_V1
+    return _V2_BASE + (_V2_DRIFT if ctx["drift_warning"] else "")
+
+
+_PREAMBLE = re.compile(r"^\s*(hier ist|hier die|here is|notiz)[^\n]*:\s*", re.IGNORECASE)
+_QUOTES = "\"'„“”«»"
+
+
+def clean(text: str) -> str:
+    """Remove a preamble line and surrounding quotes - code, not the prompt, guarantees the format."""
+    return _PREAMBLE.sub("", text.strip()).strip().strip(_QUOTES).strip()
+
 
 # Attack families a note may mention; anything but the predicted one is a hallucination.
 FAMILIES = ["Brute Force", "DoS", "DDoS", "Heartbleed", "Web Attack", "Infiltration", "Botnet", "PortScan"]
@@ -78,14 +121,16 @@ def build_prompt(ctx: dict) -> str:
 
 
 def check_rules(text: str, ctx: dict) -> dict[str, bool]:
-    """Rules every note must pass (same idea as the LLM evaluation in the course, day 18)."""
+    """Rules every note must pass (version ``RULES_VERSION``, same idea as the course's day 18)."""
     lower = text.lower()
+    stripped = text.strip()
     others = [f for f in FAMILIES if f != ctx["family"] and f.lower() not in ctx["attack_type"].lower()]
     return {
         "names_attack_type": ctx["attack_type"].lower() in lower or ctx["family"].lower() in lower,
         "no_other_attack_family": not any(re.search(rf"\b{re.escape(f.lower())}\b", lower) for f in others),
         "no_invented_identifiers": not (_IP.search(text) or _CVE.search(text) or _URL.search(text)),
-        "keeps_drift_warning": (not ctx["drift_warning"]) or "drift" in lower,
+        "drift_only_when_warned": ("drift" in lower) == ctx["drift_warning"],
+        "no_preamble": not (_PREAMBLE.match(stripped) or stripped[:1] in _QUOTES),
         "short": len(text.split()) <= MAX_WORDS,
     }
 
@@ -120,15 +165,17 @@ def generate(ctx: dict) -> dict:
     answer = client.chat.completions.create(
         model=s["model"],
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt(ctx)},
             {"role": "user", "content": build_prompt(ctx)},
         ],
         temperature=0,  # as reproducible as an LLM gets: same flow, same note
         max_tokens=220,
     )
+    text = (answer.choices[0].message.content or "").strip()
     return {
-        "text": (answer.choices[0].message.content or "").strip(),
+        "text": clean(text) if prompt_version() != "v1" else text,
         "llm_model": s["model"],
+        "prompt_version": prompt_version(),
         "tokens": answer.usage.total_tokens if answer.usage else None,
         "seconds": round(time.perf_counter() - start, 2),
     }

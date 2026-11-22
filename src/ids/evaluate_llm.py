@@ -25,6 +25,7 @@ from collections import Counter
 import pandas as pd
 
 from ids import schema
+from ids.api import llm
 from ids.config import PREPARED_DIR, REPORTS_DIR
 from ids.io import write_json
 
@@ -47,9 +48,7 @@ def main() -> None:
 
     test = pd.read_parquet(PREPARED_DIR / "test.parquet")
     attacks = test[test[schema.TARGET] == 1]
-    sample = attacks.groupby(schema.LABEL, group_keys=False).apply(
-        lambda g: g.sample(min(args.per_type, len(g)), random_state=0)
-    )
+    sample = attacks.sample(frac=1, random_state=0).groupby(schema.LABEL).head(args.per_type)
     results, start = [], time.perf_counter()
     for _, row in sample.iterrows():
         answer = _explain(row[schema.FEATURES].astype(float).to_dict())
@@ -64,7 +63,8 @@ def main() -> None:
     llm_model = next((r["llm_model"] for r in explained if r.get("llm_model")), "none")
     result = {
         "llm_model": llm_model,
-        "prompt_version": next((r["prompt_version"] for r in from_llm), "v1"),
+        "prompt_version": next((r["prompt_version"] for r in explained if r.get("llm_model")), "none"),
+        "rules_version": llm.RULES_VERSION,
         "flows": len(results),
         "explained": len(explained),
         "rule_pass_rate": round(len(from_llm) / len(explained), 4) if explained else None,
@@ -91,9 +91,11 @@ def main() -> None:
 
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
     mlflow.set_experiment(EXPERIMENT)
-    with mlflow.start_run(run_name=f"{llm_model} prompt {result['prompt_version']}"):
+    with mlflow.start_run(
+        run_name=f"{llm_model} prompt {result['prompt_version']} rules {llm.RULES_VERSION}"
+    ):
         mlflow.log_params({"llm_model": llm_model, "prompt_version": result["prompt_version"],
-                           "per_type": args.per_type})  # fmt: skip
+                           "rules_version": llm.RULES_VERSION, "per_type": args.per_type})  # fmt: skip
         mlflow.log_metrics({k: v for k, v in result.items() if isinstance(v, int | float) and v is not None})
         mlflow.log_dict(result, "llm_evaluation.json")
     print(f"logged to MLflow experiment {EXPERIMENT}")
