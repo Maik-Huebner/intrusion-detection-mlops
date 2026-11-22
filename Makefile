@@ -10,7 +10,7 @@ RETRAIN_DAYS := [monday,tuesday,wednesday,thursday]
 RETRAIN_FUTURE := [friday]
 
 .PHONY: help setup data pipeline test lint format gate check \
-        stack stop register retrain rollout rollback replay demo evaluate-api
+        stack stop llm register retrain rollout rollback replay demo evaluate-api evaluate-llm
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -48,6 +48,9 @@ stack: ## Start MLflow, API, Prometheus and Grafana
 stop: ## Stop the stack (data in the volumes is kept)
 	$(COMPOSE) down
 
+llm: ## Download the LLM for the analyst notes into the Ollama volume (once, about 2 GB)
+	$(COMPOSE) exec ollama ollama pull llama3.2:3b
+
 register: ## Log the current pipeline result to MLflow and run champion/challenger
 	$(REGISTRY) python -m ids.registry log
 	$(REGISTRY) python -m ids.registry promote
@@ -72,3 +75,6 @@ demo: ## Full live demo: make demo BEFORE=1 AFTER=2 (registry versions)
 
 evaluate-api: ## Latency, throughput, robustness and quality of the running API
 	$(REGISTRY) python -m ids.evaluate_api
+
+evaluate-llm: ## Rule pass rate, fallbacks and latency of the analyst notes (logged to MLflow)
+	$(REGISTRY) python -m ids.evaluate_llm

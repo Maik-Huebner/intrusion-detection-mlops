@@ -95,3 +95,26 @@ def test_registered_model_round_trip(project):
     original = joblib.load("models/model.joblib").predict_proba(project[schema.FEATURES])
     loaded = registry.load_registered_model(f"models:/{registry.MODEL_NAME}@{registry.CHAMPION}")
     np.testing.assert_array_equal(loaded.predict_proba(project[schema.FEATURES]), original)
+
+
+def test_serving_bundle_carries_profile_and_attack_type_model(project):
+    """One registry version = detector + drift profile + attack type model, loaded together."""
+    from ids.drift import build_profile
+    from ids.pipeline.family import build_family_model
+
+    attacks = project[project[schema.TARGET] == 1].copy()
+    attacks.loc[attacks.index[::2], schema.LABEL] = "SSH-Patator"
+    attacks.loc[attacks.index[::2], "Dst Port"] = 22
+    family = build_family_model(PARAMS["train"]).fit(attacks[schema.FEATURES], attacks[schema.LABEL])
+    joblib.dump(family, "models/family.joblib")
+    write_json(Path("models/reference_profile.json"), build_profile(project, schema.FEATURES))
+    _register(project, shuffle_labels=False)
+    registry.promote()
+
+    bundle = registry.load_serving_bundle(f"models:/{registry.MODEL_NAME}@{registry.CHAMPION}")
+    assert bundle["version"] == "1"
+    assert set(bundle["profile"]["features"]) == set(schema.FEATURES)
+    np.testing.assert_array_equal(
+        bundle["family_model"].predict_proba(attacks[schema.FEATURES]),
+        family.predict_proba(attacks[schema.FEATURES]),
+    )

@@ -5,6 +5,7 @@
 #   api         scoring API, serves the registry @champion      http://localhost:8000/docs
 #   prometheus  scrapes the API's /metrics, evaluates alerts    http://localhost:9090
 #   grafana     SOC & MLOps dashboard                           http://localhost:3000 (GRAFANA_PORT)
+#   ollama      local LLM for the analyst notes (internal only; first run: make llm)
 #
 # Containers reach each other by service name (http://mlflow:5000, http://api:8000).
 # All ports are bound to 127.0.0.1: nothing is reachable from the network.
@@ -37,9 +38,30 @@ services:
       # Without a champion (fresh clone) the API serves the model baked into the image (fallback).
       MODEL_URI: ${MODEL_URI:-models:/ids-detector@champion}
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      # Analyst notes: any OpenAI-compatible endpoint. Unset LLM_BASE_URL = template notes only.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
+      LLM_API_KEY: ${LLM_API_KEY:-ollama}
     depends_on:
       mlflow:
         condition: service_healthy
+      ollama:
+        condition: service_started  # the API starts anyway; without the LLM it writes template notes
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.40.16
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m  # keep the model in memory between notes
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    # No ports: only the API talks to the LLM, over the internal compose network.
     restart: unless-stopped
 
   prometheus:
@@ -76,3 +98,6 @@ volumes:
     name: ids-mlflow-data
   prometheus-data:
     name: ids-prometheus-data
+  ollama-models:
+    # Several GB. The name matches the volume of the course project, so a model pulled there is reused.
+    name: ollama-modelle

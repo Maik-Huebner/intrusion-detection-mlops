@@ -19,16 +19,26 @@ The tracking server comes from ``MLFLOW_TRACKING_URI`` (default: local ``mlflow.
 
 import argparse
 import os
+import tempfile
 from pathlib import Path
 
 import joblib
 import mlflow
 import pandas as pd
+import skops.io
 from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
 
 from ids import schema
-from ids.config import METRICS_FILE, MODEL_FILE, PREPARED_DIR, REFERENCE_PROFILE, REPORTS_DIR, load_params
+from ids.config import (
+    FAMILY_MODEL_FILE,
+    METRICS_FILE,
+    MODEL_FILE,
+    PREPARED_DIR,
+    REFERENCE_PROFILE,
+    REPORTS_DIR,
+    load_params,
+)
 from ids.io import read_json
 from ids.lineage import data_versions, flatten, git_state
 from ids.metrics import detection_metrics
@@ -44,6 +54,7 @@ MIN_IMPROVEMENT = 0.005
 # arbitrary code, only types on an allow-list are rebuilt. Gradient boosting needs exactly one type
 # beyond the skops defaults, so we trust that one and nothing else.
 SKOPS_TRUSTED_TYPES = ["sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor"]
+FAMILY_ARTIFACT = "family.skops"
 
 
 def load_registered_model(model_uri: str):
@@ -67,7 +78,8 @@ def log_run() -> str:
     run_name = f"train {'+'.join(d[:3] for d in split['train_days'])}"
 
     with mlflow.start_run(run_name=run_name) as run:
-        mlflow.log_params(flatten({k: params[k] for k in ("split", "train", "evaluate")}))
+        sections = ("split", "train", "evaluate", "family", "drift")
+        mlflow.log_params(flatten({k: params[k] for k in sections if k in params}))
         mlflow.log_metrics({k: v for k, v in flatten(metrics).items() if v is not None})
         mlflow.set_tags({**data_versions(), **git_state(), "train_days": ",".join(split["train_days"])})
         for path in sorted(REPORTS_DIR.glob("*")):
@@ -75,6 +87,11 @@ def log_run() -> str:
         mlflow.log_artifact("dvc.lock")
         if REFERENCE_PROFILE.exists():  # the drift reference travels with the model version
             mlflow.log_artifact(str(REFERENCE_PROFILE))
+        if FAMILY_MODEL_FILE.exists():  # so does the attack type model, stored with skops like the detector
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / FAMILY_ARTIFACT
+                skops.io.dump(joblib.load(FAMILY_MODEL_FILE), path)
+                mlflow.log_artifact(str(path), artifact_path="family")
 
         model = joblib.load(MODEL_FILE)
         example = pd.read_parquet(PREPARED_DIR / "test.parquet").head(5)[schema.FEATURES]
@@ -88,10 +105,18 @@ def log_run() -> str:
     return version
 
 
-def load_serving_bundle(model_uri: str) -> dict:
-    """Everything the API needs from a registered model: the model, its version and drift profile.
+def _download(run_id: str, artifact: str) -> Path | None:
+    try:
+        return Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact))
+    except (MlflowException, OSError):
+        return None
 
-    ``model_uri`` is ``models:/<name>@<alias>`` or ``models:/<name>/<version>``.
+
+def load_serving_bundle(model_uri: str) -> dict:
+    """Everything the API needs from a registered model version.
+
+    The detector, its drift profile and the attack type model - all logged with the same run, so
+    they always belong together. ``model_uri`` is ``models:/<name>@<alias>`` or ``models:/<name>/<n>``.
     """
     client = _client()
     name, _, ref = model_uri.removeprefix("models:/").partition("/")
@@ -101,17 +126,16 @@ def load_serving_bundle(model_uri: str) -> dict:
     else:
         version = client.get_model_version(name, ref)
 
-    profile = None
-    try:
-        path = mlflow.artifacts.download_artifacts(
-            run_id=version.run_id, artifact_path=REFERENCE_PROFILE.name
-        )
-        profile = read_json(Path(path))
-    except (MlflowException, OSError):
+    profile_path = _download(version.run_id, REFERENCE_PROFILE.name)
+    family_path = _download(version.run_id, f"family/{FAMILY_ARTIFACT}")
+    if profile_path is None:
         print(f"no {REFERENCE_PROFILE.name} logged with {name} v{version.version}: drift monitoring off")
+    if family_path is None:
+        print(f"no attack type model logged with {name} v{version.version}: attack types off")
     return {
         "model": load_registered_model(f"models:/{name}/{version.version}"),
-        "profile": profile,
+        "profile": read_json(profile_path) if profile_path else None,
+        "family_model": skops.io.load(family_path, trusted=SKOPS_TRUSTED_TYPES) if family_path else None,
         "source": model_uri,
         "version": str(version.version),
     }

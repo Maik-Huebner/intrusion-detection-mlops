@@ -8,6 +8,7 @@ from ids import schema
 from ids.api.schemas import EXAMPLE_FLOW, MAX_BATCH
 from ids.drift import build_profile
 from ids.io import write_json
+from ids.pipeline.family import build_family_model
 from ids.pipeline.train import build_model
 
 PARAMS = {
@@ -19,6 +20,15 @@ PARAMS = {
 }
 
 
+def two_attack_types(flows):
+    """The fixture only has 'DoS Hulk'; relabel half of the attacks as SSH-Patator on port 22."""
+    attacks = flows[flows[schema.TARGET] == 1].copy()
+    ssh = attacks.index[::2]
+    attacks.loc[ssh, "Dst Port"] = 22
+    attacks.loc[ssh, schema.LABEL] = "SSH-Patator"
+    return attacks
+
+
 @pytest.fixture
 def model_files(prepared_flows, tmp_path, monkeypatch):
     """A model trained on synthetic flows plus the drift profile of its benign training flows."""
@@ -26,8 +36,13 @@ def model_files(prepared_flows, tmp_path, monkeypatch):
     joblib.dump(model, tmp_path / "model.joblib")
     benign = prepared_flows[prepared_flows[schema.TARGET] == 0]
     write_json(tmp_path / "profile.json", build_profile(benign, schema.FEATURES))
+    attacks = two_attack_types(prepared_flows)
+    family = build_family_model(PARAMS).fit(attacks[schema.FEATURES], attacks[schema.LABEL])
+    joblib.dump(family, tmp_path / "family.joblib")
     monkeypatch.setenv("MODEL_PATH", str(tmp_path / "model.joblib"))
     monkeypatch.setenv("PROFILE_PATH", str(tmp_path / "profile.json"))
+    monkeypatch.setenv("FAMILY_PATH", str(tmp_path / "family.joblib"))
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
     monkeypatch.setenv("THRESHOLD", "0.5")
     monkeypatch.delenv("MODEL_URI", raising=False)
     return tmp_path
@@ -159,3 +174,81 @@ def test_unreachable_registry_falls_back_to_baked_in_model(model_files, monkeypa
         assert info["fallback"] is True
         assert info["version"] == "file"
         assert test_client.post("/predict", json=EXAMPLE_FLOW).status_code == 200
+
+
+# --- Attack type and analyst note -----------------------------------------------------------------
+
+
+def attack_and_benign(prepared_flows) -> tuple[dict, dict]:
+    attack_row = prepared_flows.index[prepared_flows[schema.TARGET] == 1][1]
+    benign_row = prepared_flows.index[prepared_flows[schema.TARGET] == 0][0]
+    return flow_from(prepared_flows, attack_row), flow_from(prepared_flows, benign_row)
+
+
+def test_alarms_get_an_attack_type(client, prepared_flows):
+    attack, benign = attack_and_benign(prepared_flows)
+    alarm = client.post("/predict", json=attack).json()
+    assert alarm["attack_type"] == "DoS Hulk"
+    assert alarm["family"] == "DoS"
+    assert alarm["type_confidence"] >= 0.9
+    quiet = client.post("/predict", json=benign).json()
+    assert quiet["attack_type"] is None and quiet["family"] is None
+    assert 'ids_alarms_by_family_total{family="DoS"}' in client.get("/metrics").text
+
+
+def test_explain_benign_flow_needs_no_llm(client, prepared_flows, monkeypatch):
+    from ids.api import llm
+
+    monkeypatch.setattr(llm, "generate", lambda ctx: pytest.fail("LLM must not be called for benign flows"))
+    body = client.post("/explain", json=attack_and_benign(prepared_flows)[1]).json()
+    assert body["source"] == "no_alarm"
+    assert body["note"].startswith("Kein Alarm")
+
+
+def test_explain_without_llm_uses_the_template(client, prepared_flows):
+    body = client.post("/explain", json=attack_and_benign(prepared_flows)[0]).json()
+    assert body["source"] == "fallback"
+    assert body["reason"] == "not_configured"
+    assert "DoS Hulk" in body["note"]
+    assert body["unusual_features"]  # the attack flow lies outside the benign ranges
+
+
+def fake_llm(monkeypatch, answer=None, error=None):
+    from ids.api import llm
+
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.invalid/v1")
+
+    def generate(ctx):
+        if error:
+            raise error
+        return {"text": answer, "llm_model": "fake", "tokens": 42, "seconds": 0.1}
+
+    monkeypatch.setattr(llm, "generate", generate)
+
+
+def test_explain_with_a_good_llm_note(client, prepared_flows, monkeypatch):
+    note = "Erkannt wurde DoS Hulk, sehr wahrscheinlich. Auffällig ist die kurze Flow Duration. Ziel prüfen."
+    fake_llm(monkeypatch, answer=note)
+    body = client.post("/explain", json=attack_and_benign(prepared_flows)[0]).json()
+    assert body["source"] == "llm"
+    assert body["note"] == note
+    assert all(body["rules"].values())
+    assert 'ids_llm_requests_total{result="ok"}' in client.get("/metrics").text
+
+
+def test_explain_rejects_a_hallucinating_note(client, prepared_flows, monkeypatch):
+    fake_llm(monkeypatch, answer="DoS Hulk von 10.0.0.5, vermutlich ein Botnet (CVE-2014-0160).")
+    body = client.post("/explain", json=attack_and_benign(prepared_flows)[0]).json()
+    assert body["source"] == "fallback"
+    assert body["reason"] == "rules"
+    assert body["rules"]["no_invented_identifiers"] is False
+    assert body["rules"]["no_other_attack_family"] is False
+    assert "10.0.0.5" not in body["note"]
+
+
+def test_explain_survives_an_llm_outage(client, prepared_flows, monkeypatch):
+    fake_llm(monkeypatch, error=TimeoutError("LLM too slow"))
+    response = client.post("/explain", json=attack_and_benign(prepared_flows)[0])
+    assert response.status_code == 200
+    assert response.json()["reason"] == "TimeoutError"
+    assert 'ids_llm_errors_total{kind="TimeoutError"}' in client.get("/metrics").text

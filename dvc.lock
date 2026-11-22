@@ -182,8 +182,8 @@ stages:
       size: 717008
     - path: src/ids/drift.py
       hash: md5
-      md5: a4a312b9a068fdefa1929df837cbbaf7
-      size: 3173
+      md5: ddcb1321edcebcc85da1857b533c9641
+      size: 4166
     - path: src/ids/pipeline/drift.py
       hash: md5
       md5: 542d62061085f4a487958d0a4b1762cf
@@ -202,3 +202,32 @@ stages:
       hash: md5
       md5: dbe14ba4e1f82f8602507868ff7bc4eb
       size: 1611
+  family:
+    cmd: python -m ids.pipeline.family
+    deps:
+    - path: data/prepared
+      hash: md5
+      md5: e26b56bb8357bbe40de5399eed2d240a.dir
+      size: 264562895
+      nfiles: 3
+    - path: src/ids/pipeline/family.py
+      hash: md5
+      md5: d938d72e59d86206756c1949ac060b6d
+      size: 4291
+    params:
+      params.yaml:
+        family:
+          max_iter: 100
+          learning_rate: 0.1
+          max_leaf_nodes: 31
+          random_state: 42
+          min_confidence: 0.9
+    outs:
+    - path: models/family.joblib
+      hash: md5
+      md5: 787687e8e802941f2c1d154f1b93fc24
+      size: 1866240
+    - path: reports/family.json
+      hash: md5
+      md5: 3a55b805ed2ca42bfcad06b8018f2e26
+      size: 1142

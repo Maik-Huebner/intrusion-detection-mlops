@@ -6,6 +6,7 @@ Prometheus scrapes ``GET /metrics`` every few seconds. Three groups of metrics:
 * model output: how many flows are scored, how many raise an alarm, how sure the model is
 * data drift: PSI of the flows the model lets through against the reference profile
   (same method as the DVC stage ``drift``, see ``ids.drift``)
+* LLM analyst notes: results, errors, latency, tokens
 """
 
 import threading
@@ -34,6 +35,16 @@ PROBABILITY = Histogram(
     buckets=[0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0],
 )
 MODEL = Info("ids_model", "The model the API serves")
+ALARMS_BY_FAMILY = Counter("ids_alarms_by_family_total", "Alarms by predicted attack family", ["family"])
+
+# --- LLM analyst notes -----------------------------------------------------------------------------
+# result: ok | rejected (broke a rule) | error (timeout, unreachable) | not_configured
+LLM_REQUESTS = Counter("ids_llm_requests_total", "Analyst note requests by result", ["result"])
+LLM_ERRORS = Counter("ids_llm_errors_total", "LLM errors by exception type", ["kind"])
+LLM_LATENCY = Histogram(
+    "ids_llm_latency_seconds", "LLM response time in seconds", buckets=[0.5, 1, 2, 5, 10, 20, 30, 60, 120]
+)
+LLM_TOKENS = Counter("ids_llm_tokens_total", "Tokens used by the LLM")
 
 # --- Drift -----------------------------------------------------------------------------------------
 DRIFT_SHARE = Gauge("ids_drift_share", "Share of drifted features in the recent 'benign' traffic")

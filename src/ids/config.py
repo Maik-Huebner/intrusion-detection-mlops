@@ -14,6 +14,7 @@ RAW_ARCHIVE = Path("data/raw/CICIDS2017_improved.zip")
 INTERIM_DIR = Path("data/interim")
 PREPARED_DIR = Path("data/prepared")
 MODEL_FILE = Path("models/model.joblib")
+FAMILY_MODEL_FILE = Path("models/family.joblib")  # attack type of flagged flows
 REFERENCE_PROFILE = Path("models/reference_profile.json")  # drift reference, shipped with the model
 METRICS_FILE = Path("metrics.json")
 REPORTS_DIR = Path("reports")

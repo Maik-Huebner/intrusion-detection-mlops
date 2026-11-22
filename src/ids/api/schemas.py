@@ -67,6 +67,12 @@ Flow = create_model(
 class Prediction(BaseModel):
     is_attack: bool = Field(description="True if the attack probability reaches the alarm threshold")
     attack_probability: float = Field(ge=0, le=1)
+    attack_type: str | None = Field(
+        default=None,
+        description="Only for alarms: e.g. 'SSH-Patator', or 'uncertain' below the confidence floor",
+    )
+    family: str | None = Field(default=None, description="Only for alarms: attack family, e.g. 'Brute Force'")
+    type_confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class BatchRequest(BaseModel):
@@ -93,3 +99,26 @@ class DriftStatus(BaseModel):
     drift_share: float | None = None
     drifted_features: int | None = None
     top_features: dict[str, float] = {}
+
+
+class UnusualFeature(BaseModel):
+    feature: str
+    value: float
+    normal_low: float = Field(description="10 % quantile of benign training traffic")
+    normal_high: float = Field(description="90 % quantile of benign training traffic")
+    distance: float = Field(description="How far outside the normal range, in multiples of its width")
+
+
+class Explanation(BaseModel):
+    """Response of /explain: the models' findings plus a note for the analyst."""
+
+    prediction: Prediction
+    unusual_features: list[UnusualFeature]
+    drift_warning: bool = Field(description="True if the live drift monitor currently reports drift")
+    note: str
+    source: str = Field(description="'llm', 'fallback' (template, see reason) or 'no_alarm'")
+    reason: str | None = Field(default=None, description="Why the template was used, e.g. 'rules', 'timeout'")
+    rules: dict[str, bool] = Field(default={}, description="Rule check of the LLM note")
+    llm_model: str | None = None
+    prompt_version: str | None = None
+    seconds: float | None = None

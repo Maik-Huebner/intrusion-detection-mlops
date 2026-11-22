@@ -30,7 +30,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # A model is baked in as a safe default: the image always works on its own. In the compose stack
 # MODEL_URI points to the registry @champion instead, and this model is only the fallback.
 COPY params.yaml ./
-COPY models/model.joblib models/reference_profile.json ./models/
+COPY models/model.joblib models/reference_profile.json models/family.joblib ./models/
 
 USER app
 EXPOSE 8000

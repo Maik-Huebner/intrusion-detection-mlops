@@ -12,6 +12,8 @@ Configuration (environment variables):
                    metric ``ids_model_info``) instead of not starting at all.
 * ``MODEL_PATH``   joblib model file (default ``models/model.joblib``)
 * ``PROFILE_PATH`` drift reference profile for that file (default ``models/reference_profile.json``)
+* ``FAMILY_PATH``  attack type model for that file (default ``models/family.joblib``)
+* ``LLM_*``        analyst notes via an OpenAI-compatible LLM, see ``ids.api.llm``
 * ``THRESHOLD``    alarm threshold (default: ``evaluate.threshold`` from params.yaml, else 0.5)
 """
 
@@ -27,10 +29,22 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ids import __version__, schema
+from ids.api import llm
 from ids.api import monitoring as m
-from ids.api.schemas import BatchRequest, BatchResponse, DriftStatus, Flow, ModelInfo, Prediction
-from ids.config import MODEL_FILE, PARAMS_FILE, REFERENCE_PROFILE, load_params
+from ids.api.schemas import (
+    BatchRequest,
+    BatchResponse,
+    DriftStatus,
+    Explanation,
+    Flow,
+    ModelInfo,
+    Prediction,
+    UnusualFeature,
+)
+from ids.config import FAMILY_MODEL_FILE, MODEL_FILE, PARAMS_FILE, REFERENCE_PROFILE, load_params
+from ids.drift import unusual_features
 from ids.io import read_json
+from ids.pipeline.family import family_of, predict_types
 
 log = logging.getLogger("uvicorn.error")
 DRIFT_DEFAULTS = {"feature_threshold": 0.2, "share_threshold": 0.1, "window": 1000}
@@ -41,9 +55,11 @@ state: dict = {}
 def _load_file_model() -> dict:
     path = Path(os.getenv("MODEL_PATH", str(MODEL_FILE)))
     profile_path = Path(os.getenv("PROFILE_PATH", str(REFERENCE_PROFILE)))
+    family_path = Path(os.getenv("FAMILY_PATH", str(FAMILY_MODEL_FILE)))
     return {
         "model": joblib.load(path),
         "profile": read_json(profile_path) if profile_path.exists() else None,
+        "family_model": joblib.load(family_path) if family_path.exists() else None,
         "source": str(path),
         "version": "file",
     }
@@ -61,16 +77,17 @@ def _load_model() -> dict:
     return _load_file_model() | {"fallback": False}
 
 
-def _settings() -> tuple[float, dict]:
+def _settings() -> tuple[float, dict, float]:
     params = load_params() if PARAMS_FILE.exists() else {}
     threshold = float(os.getenv("THRESHOLD") or params.get("evaluate", {}).get("threshold", 0.5))
-    return threshold, DRIFT_DEFAULTS | params.get("drift", {})
+    min_confidence = float(params.get("family", {}).get("min_confidence", 0.9))
+    return threshold, DRIFT_DEFAULTS | params.get("drift", {}), min_confidence
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     state.update(_load_model())  # once at startup, not per request
-    state["threshold"], drift = _settings()
+    state["threshold"], drift, state["min_confidence"] = _settings()
     state["monitor"] = (
         m.DriftMonitor(
             state["profile"], drift["feature_threshold"], drift["share_threshold"], drift["window"]
@@ -81,8 +98,9 @@ async def lifespan(_: FastAPI):
     m.MODEL.info(
         {"source": state["source"], "version": state["version"], "fallback": str(state["fallback"]).lower()}
     )
-    log.info("serving %s (version %s), drift monitoring %s", state["source"], state["version"],
-             "on" if state["monitor"] else "off")  # fmt: skip
+    log.info("serving %s (version %s), drift monitoring %s, attack types %s, LLM notes %s", state["source"],
+             state["version"], "on" if state["monitor"] else "off", "on" if state["family_model"] else "off",
+             llm.settings()["model"] if llm.is_configured() else "off (templates)")  # fmt: skip
     yield
     state.clear()
 
@@ -122,10 +140,19 @@ def _predict(flows: list) -> list[Prediction]:
     if state["monitor"]:
         state["monitor"].observe(frame[~alarms])
 
-    return [
+    predictions = [
         Prediction(is_attack=bool(alarm), attack_probability=round(float(p), 4))
         for p, alarm in zip(probabilities, alarms, strict=True)
     ]
+    if state["family_model"] is not None and alarms.any():  # the type is only asked for alarms
+        types, confidence = predict_types(state["family_model"], frame[alarms], state["min_confidence"])
+        alarm_rows = [i for i, alarm in enumerate(alarms) if alarm]
+        for i, attack_type, conf in zip(alarm_rows, types, confidence, strict=True):
+            family = family_of(attack_type)
+            predictions[i].attack_type, predictions[i].family = str(attack_type), family
+            predictions[i].type_confidence = round(float(conf), 4)
+            m.ALARMS_BY_FAMILY.labels(family).inc()
+    return predictions
 
 
 @app.get("/health", tags=["info"])
@@ -171,3 +198,52 @@ def predict(flow: Flow) -> Prediction:  # type: ignore[valid-type]
 def predict_batch(request: BatchRequest) -> BatchResponse:
     predictions = _predict(request.flows)
     return BatchResponse(predictions=predictions, alarms=sum(p.is_attack for p in predictions))
+
+
+@app.post("/explain", tags=["scoring"])
+def explain(flow: Flow) -> Explanation:  # type: ignore[valid-type]
+    """Score one flow and write a note for the analyst (LLM with rule check, template as fallback)."""
+    prediction = _predict([flow])[0]
+    values = flow.model_dump(by_alias=True)
+    unusual = unusual_features(state["profile"], values) if state["profile"] else []
+    monitor = state["monitor"]
+    drift_warning = bool(monitor and monitor.last and monitor.last["drift"])
+    base = {"prediction": prediction, "unusual_features": [UnusualFeature(**u) for u in unusual],
+            "drift_warning": drift_warning}  # fmt: skip
+
+    if not prediction.is_attack:
+        return Explanation(**base, note=llm.no_alarm_note(prediction.attack_probability), source="no_alarm")
+
+    ctx = {
+        "attack_type": prediction.attack_type or "unbekannter Angriff",
+        "family": prediction.family or "unbekannt",
+        "type_confidence": prediction.type_confidence or 0.0,
+        "attack_probability": prediction.attack_probability,
+        "dst_port": values["Dst Port"],
+        "protocol": values["Protocol"],
+        "unusual_features": unusual,
+        "drift_warning": drift_warning,
+    }
+    fallback = {"note": llm.fallback_note(ctx), "source": "fallback", "prompt_version": "template"}
+    if not llm.is_configured():
+        m.LLM_REQUESTS.labels("not_configured").inc()
+        return Explanation(**base, **fallback, reason="not_configured")
+    try:
+        answer = llm.generate(ctx)
+    except Exception as exc:  # timeout, connection refused, rate limit ...: the analyst still gets a note
+        m.LLM_REQUESTS.labels("error").inc()
+        m.LLM_ERRORS.labels(type(exc).__name__).inc()
+        log.warning("LLM failed (%s) - template note", exc)
+        return Explanation(**base, **fallback, reason=type(exc).__name__)
+
+    m.LLM_LATENCY.observe(answer["seconds"])
+    if answer["tokens"]:
+        m.LLM_TOKENS.inc(answer["tokens"])
+    rules = llm.check_rules(answer["text"], ctx)
+    if not all(rules.values()):
+        m.LLM_REQUESTS.labels("rejected").inc()
+        return Explanation(**base, **fallback, reason="rules", rules=rules, llm_model=answer["llm_model"],
+                           seconds=answer["seconds"])  # fmt: skip
+    m.LLM_REQUESTS.labels("ok").inc()
+    return Explanation(**base, note=answer["text"], source="llm", rules=rules, llm_model=answer["llm_model"],
+                       prompt_version=llm.PROMPT_VERSION, seconds=answer["seconds"])  # fmt: skip

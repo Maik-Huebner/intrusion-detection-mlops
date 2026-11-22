@@ -1,4 +1,4 @@
-# prepare -> validate -> split -> train -> evaluate + drift -> plots
+# prepare -> validate -> split -> train + family -> evaluate + drift -> plots
 # Run with: uv run dvc repro
 
 stages:
@@ -45,6 +45,19 @@ stages:
       - train
     outs:
       - models/model.joblib
+
+  family:
+    cmd: python -m ids.pipeline.family
+    deps:
+      - src/ids/pipeline/family.py
+      - data/prepared
+    params:
+      - family
+    outs:
+      - models/family.joblib
+    metrics:
+      - reports/family.json:
+          cache: false
 
   evaluate:
     cmd: python -m ids.pipeline.evaluate

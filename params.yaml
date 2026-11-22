@@ -19,6 +19,14 @@ evaluate:
   # Alarm if P(attack) >= threshold
   threshold: 0.5
 
+# Second model: which attack type is a flagged flow? (trained on the attack flows only)
+family:
+  max_iter: 100
+  learning_rate: 0.1
+  max_leaf_nodes: 31
+  random_state: 42
+  min_confidence: 0.9  # below this the API reports the type as "uncertain" instead of guessing
+
 # Label-free drift monitoring (offline in the `drift` stage, online in the API).
 # Watched: the flows the model lets through as benign, compared with benign training traffic.
 drift:

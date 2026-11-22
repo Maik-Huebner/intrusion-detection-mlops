@@ -71,3 +71,22 @@ def test_summarize_threshold_is_strict():
 def test_empty_frame_does_not_crash(benign):
     profile = build_profile(benign, schema.FEATURES)
     assert all(np.isfinite(list(psi(profile, benign.iloc[:0]).values())))
+
+
+def test_unusual_features_finds_values_outside_the_benign_range(benign):
+    from ids.drift import unusual_features
+
+    profile = build_profile(benign, schema.FEATURES)
+    flow = benign.iloc[0][schema.FEATURES].to_dict() | {"Flow Duration": -1e9, "SYN Flag Count": 1e6}
+    found = unusual_features(profile, flow, top=3)
+    assert {f["feature"] for f in found[:2]} == {"Flow Duration", "SYN Flag Count"}
+    assert all(f["value"] < f["normal_low"] or f["value"] > f["normal_high"] for f in found)
+    assert [f["distance"] for f in found] == sorted((f["distance"] for f in found), reverse=True)
+
+
+def test_typical_flow_has_no_unusual_features(benign):
+    from ids.drift import unusual_features
+
+    profile = build_profile(benign, ["Flow Duration"])
+    median_flow = {"Flow Duration": float(benign["Flow Duration"].median())}
+    assert unusual_features(profile, median_flow) == []

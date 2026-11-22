@@ -1,0 +1,58 @@
+{
+  "future_by_true_family": {
+    "Botnet": {
+      "attacks": 736,
+      "predicted_family_share": {
+        "Brute Force": 0.0598,
+        "DoS": 0.8383,
+        "uncertain": 0.1019
+      }
+    },
+    "DDoS": {
+      "attacks": 95144,
+      "predicted_family_share": {
+        "DoS": 1.0
+      }
+    },
+    "Infiltration": {
+      "attacks": 71798,
+      "predicted_family_share": {
+        "Brute Force": 0.0013,
+        "DoS": 0.979,
+        "uncertain": 0.0197
+      }
+    },
+    "PortScan": {
+      "attacks": 159066,
+      "predicted_family_share": {
+        "Brute Force": 0.0002,
+        "DoS": 0.9883,
+        "uncertain": 0.0116
+      }
+    },
+    "Web Attack": {
+      "attacks": 104,
+      "predicted_family_share": {
+        "DoS": 0.0865,
+        "Heartbleed": 0.8462,
+        "uncertain": 0.0673
+      }
+    }
+  },
+  "known_types": [
+    "DoS GoldenEye",
+    "DoS Hulk",
+    "DoS Slowhttptest",
+    "DoS Slowloris",
+    "FTP-Patator",
+    "Heartbleed",
+    "SSH-Patator"
+  ],
+  "min_confidence": 0.9,
+  "test": {
+    "attacks": 35715,
+    "family_accuracy": 0.9999,
+    "type_accuracy": 0.9999,
+    "uncertain": 0.0001
+  }
+}

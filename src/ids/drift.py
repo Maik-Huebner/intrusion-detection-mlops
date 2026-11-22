@@ -69,3 +69,24 @@ def summarize(
         "drift_share": round(share, 4),
         "top_features": {f: round(psis[f], 4) for f in sorted(psis, key=lambda f: -psis[f])[:top]},
     }
+
+
+def unusual_features(profile: dict, flow: dict, top: int = 5) -> list[dict]:
+    """The features of one flow that lie furthest outside the benign 10-90 % range.
+
+    Gives an analyst (and the LLM note) something concrete to look at: "Flow Duration 2 ms,
+    normally 1.3 s - 98 s". Distance is measured in multiples of the benign range's width.
+    """
+    found = []
+    for feature, ref in profile["features"].items():
+        edges = ref["edges"]
+        if not edges or feature not in flow:
+            continue
+        low, high, value = edges[0], edges[-1], float(flow[feature])
+        if low <= value <= high:
+            continue
+        width = (high - low) or (abs(high) or 1.0)
+        distance = (low - value if value < low else value - high) / width
+        found.append({"feature": feature, "value": value, "normal_low": low, "normal_high": high,
+                      "distance": round(distance, 3)})  # fmt: skip
+    return sorted(found, key=lambda f: -f["distance"])[:top]

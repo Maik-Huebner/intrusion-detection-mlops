@@ -37,6 +37,7 @@ api = [
     # Load the @champion from the registry: the client part of MLflow plus skops for the model file.
     "mlflow-skinny==3.17.2",
     "skops==0.16.0",
+    "openai==3.52.0",  # analyst notes via any OpenAI-compatible LLM (Ollama in the stack)
 ]
 notebook = [
     "ipykernel==7.4.0",

@@ -29,6 +29,14 @@ groups:
         annotations:
           summary: "The API could not load the registry champion and serves its baked-in model."
 
+      - alert: IdsLlmFallback
+        # Analyst notes come from the template: LLM unreachable, too slow, or its note broke a rule.
+        expr: sum(increase(ids_llm_requests_total{result=~"error|rejected"}[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Analyst notes fall back to the template (LLM error or rule violation in the last 5 minutes)."
+
       - alert: IdsHighErrorRate
         expr: |
           sum(rate(ids_http_requests_total{status=~"5.."}[1m]))
