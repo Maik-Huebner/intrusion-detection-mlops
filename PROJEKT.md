@@ -47,6 +47,9 @@ ML-/Security-Team, das den Detektor betreibt.
 Dazu kommt ein Kriterium für den Betrieb: Das Monitoring muss den Drift am Donnerstag melden, **ohne**
 die echten Labels zu kennen, und das neu trainierte Modell muss die neuen Angriffe wieder erkennen.
 
+**Erreicht:** Test 100 % / 0 Fehlalarme; Drift-Alarm am Donnerstag bei 0 % Erkennung des alten Modells;
+Freitag nach dem Retraining 99,1 % statt 37,3 %.
+
 ## Pflicht-Anforderungen (Teil 5.2)
 
 - [x] GitHub-Repository
@@ -64,9 +67,9 @@ die echten Labels zu kennen, und das neu trainierte Modell muss die neuen Angrif
 - [x] Daten mit DVC versioniert, Pipeline mit `dvc repro`, Experimente mit `dvc exp run`
 - [x] Quality Gate in CI
 - [x] Model Registry in MLflow (Champion/Challenger, Rollback)
-- [ ] Monitoring mit `/metrics`, Prometheus und Grafana
-- [ ] Drift-Prüfung
-- [ ] Evaluation der API (Latenz p50/p95, Robustheit)
+- [x] Monitoring mit `/metrics`, Prometheus und Grafana (fünf Alarmregeln, fertiges Dashboard)
+- [x] Drift-Prüfung ohne Labels: offline als DVC-Stufe, live in der API
+- [x] Evaluation der API (Latenz p50/p95/p99, Durchsatz, Robustheit) mit MLflow
 
 ## Risiken
 
@@ -82,8 +85,7 @@ die echten Labels zu kennen, und das neu trainierte Modell muss die neuen Angrif
 | Tag | Ziel |
 |---|---|
 | vorab (13.11.) | Repository, Daten, DVC-Pipeline, Training, Quality Gate, API, Dockerfile, CI |
-| 21 | Repository öffentlich, CI grün, MLflow-Server mit Registry getestet |
-| 22 | Monitoring: `/metrics`, Prometheus, Grafana, Alarme |
-| 23 | Drift-Prüfung, Retraining und Rollout über die Registry, Evaluation der API |
+| vorab (22.11.) | Repository öffentlich, CI grün, Registry gegen MLflow-Server getestet, Monitoring, Drift-Prüfung, Live-Demo, Evaluation der API |
+| 21–23 | Feinschliff, Präsentation, Demo üben |
 | 24 | README fertig, Präsentation, **Abgabe**: Git-Tag `abgabe` |
 | 25 | Präsentation (10 Minuten + 5 Minuten Fragen) |
