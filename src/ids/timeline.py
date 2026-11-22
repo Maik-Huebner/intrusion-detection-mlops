@@ -54,6 +54,11 @@ def _segments(result: dict, gap: float = 15) -> list[list[datetime]]:
     return [[datetime.fromtimestamp(ts) for ts in seg] for seg in segments]
 
 
+def _visible_from(scenes_file: Path) -> float:
+    scenes = json.loads(scenes_file.read_text(encoding="utf-8"))
+    return scenes[1]["time"] - 6 if len(scenes) > 2 else scenes[0]["time"]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--minutes", type=int, default=20)
@@ -97,6 +102,8 @@ def main() -> None:
         label = "baked-in model" if version == "file" else f"model v{version}"
         colour = next(colours, MODEL)
         for x in _segments(result):  # a version can be served twice (rollback): one bar per period
+            if args.scenes:
+                x = [ts for ts in x if ts.timestamp() >= _visible_from(args.scenes)] or x
             ax_model.plot(x, [0] * len(x), color=colour, linewidth=10, solid_capstyle="butt")
             ax_model.text(x[len(x) // 2], 0.45, label, ha="center", fontsize=9, color=colour, weight="bold",
                           clip_on=True)  # fmt: skip
@@ -106,17 +113,20 @@ def main() -> None:
     ax_model.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
     if args.scenes:
-        scenes = json.loads(args.scenes.read_text(encoding="utf-8"))
-        for i, scene in enumerate(scenes[:-1]):
+        scenes = json.loads(args.scenes.read_text(encoding="utf-8"))[:-1]  # last entry marks the end
+        # Start shortly before the first traffic scene: before that the API restarts (rollback) and still
+        # shows the state of whatever ran earlier.
+        left = _visible_from(args.scenes)
+        visible = [s for s in scenes if s["time"] >= left]
+        for i, scene in enumerate(visible):
             when = datetime.fromtimestamp(scene["time"])
             for ax in (ax_flows, ax_drift, ax_model):
                 ax.axvline(when, color="#888888", linewidth=0.8, linestyle=":")
             y = 1.0 + 0.09 * (i % 2)  # alternate heights so neighbouring labels do not overlap
             ax_flows.text(when, y, " " + scene["label"], transform=ax_flows.get_xaxis_transform(), fontsize=8,
                           va="bottom", color="#333333")  # fmt: skip
-        start_x = datetime.fromtimestamp(scenes[0]["time"] - 20)
         for ax in (ax_flows, ax_drift, ax_model):
-            ax.set_xlim(left=start_x)
+            ax.set_xlim(left=datetime.fromtimestamp(left))
 
     for ax in (ax_flows, ax_drift, ax_model):
         ax.spines[["top", "right"]].set_visible(False)

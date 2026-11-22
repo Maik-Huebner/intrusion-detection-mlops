@@ -3,6 +3,7 @@
 1. Roll back: the old model (trained Monday-Wednesday) is @champion, the API restarts with it.
 2. Wednesday traffic: known attacks are caught, the drift monitor stays calm.
 3. Thursday traffic: unseen attacks - no alarms at all, but the drift monitor fires (IdsDataDrift).
+   A Friday DDoS flow gets an analyst note: the type model calls it "DoS", the note warns about drift.
 4. Rollout: the retrained model (Monday-Thursday) becomes @champion, the API restarts with it.
 5. Friday traffic: attacks the new model has never seen either are caught again.
 
@@ -21,7 +22,10 @@ import time
 import urllib.request
 from pathlib import Path
 
-from ids import replay, timeline
+import pandas as pd
+
+from ids import replay, schema, timeline
+from ids.config import INTERIM_DIR
 from ids.registry import set_champion
 
 SCENES_FILE = Path("docs/images/live_demo_scenes.json")
@@ -34,11 +38,37 @@ def _rollout(version: str) -> None:
         try:
             with urllib.request.urlopen(f"{replay.API_URL}/model", timeout=2) as response:
                 if json.load(response)["version"] == version:
+                    time.sleep(12)  # let Prometheus scrape the fresh API before the next scene
                     return
         except OSError:
             pass
         time.sleep(1)
     sys.exit(f"API did not come back with model version {version}")
+
+
+def _ddos_flow() -> dict:
+    flows = pd.read_parquet(INTERIM_DIR / "friday.parquet")
+    flow = flows[flows[schema.LABEL] == "DDoS"].sample(1, random_state=1)[schema.FEATURES].astype(float)
+    return flow.iloc[0].to_dict()
+
+
+def _explain(flow: dict) -> dict:
+    request = urllib.request.Request(
+        f"{replay.API_URL}/explain",
+        data=json.dumps(flow).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=180) as response:
+        return json.load(response)
+
+
+def _explain_ddos() -> None:
+    """The analyst note for one DDoS flow while the drift monitor is firing."""
+    answer = _explain(_ddos_flow())
+    p = answer["prediction"]
+    print(f"true type: DDoS -> model: {p['attack_type']} ({p['family']}, {p['type_confidence']:.1%} sure), "
+          f"drift warning: {answer['drift_warning']}, note from: {answer['source']}")  # fmt: skip
+    print(f"note: {answer['note']}")
 
 
 def _replay(day: str, flows: int, rate: int) -> None:
@@ -62,12 +92,16 @@ def main() -> None:
 
     scene(f"rollback to v{args.before}")
     _rollout(args.before)
+    print("warming up the LLM (loads the model into memory) ...")
+    print(f"  first note from: {_explain(_ddos_flow())['source']}")
     scene("Wednesday: known attacks")
     _replay("wednesday", args.flows, args.rate)
     scene("Thursday: unseen attacks")
     _replay("thursday", args.flows, args.rate)
-    print("waiting 40 s so Prometheus can fire the IdsDataDrift alert ...")
-    time.sleep(40)
+    scene("Analyst note for a DDoS flow")
+    _explain_ddos()
+    print("waiting for Prometheus to fire the IdsDataDrift alert ...")
+    time.sleep(30)
     scene(f"retrained v{args.after} rolled out")
     _rollout(args.after)
     scene("Friday: never seen by either model")
