@@ -94,3 +94,12 @@ def test_not_configured_without_base_url(monkeypatch):
     assert llm.is_configured() is False
     monkeypatch.setenv("LLM_BASE_URL", "http://ollama:11434/v1")
     assert llm.is_configured() is True
+
+
+def test_uncertain_type_must_be_called_unclear():
+    ctx = CTX | {"uncertain": True, "attack_type": "unklarer Angriffstyp", "family": "unklar"}
+    assert "unklar" in llm.build_prompt(ctx) and "SSH-Patator" not in llm.build_prompt(ctx)
+    assert llm.check_rules("Ein Angriff wurde erkannt, der Typ ist unklar. Quelle prüfen.", ctx)[
+        "names_attack_type"
+    ]
+    assert not llm.check_rules("Ein uncertain-Angriff der Familie uncertain.", ctx)["names_attack_type"]

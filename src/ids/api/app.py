@@ -44,7 +44,7 @@ from ids.api.schemas import (
 from ids.config import FAMILY_MODEL_FILE, MODEL_FILE, PARAMS_FILE, REFERENCE_PROFILE, load_params
 from ids.drift import unusual_features
 from ids.io import read_json
-from ids.pipeline.family import family_of, predict_types
+from ids.pipeline.family import UNCERTAIN, family_of, predict_types
 
 log = logging.getLogger("uvicorn.error")
 DRIFT_DEFAULTS = {"feature_threshold": 0.2, "share_threshold": 0.1, "window": 1000}
@@ -214,9 +214,11 @@ def explain(flow: Flow) -> Explanation:  # type: ignore[valid-type]
     if not prediction.is_attack:
         return Explanation(**base, note=llm.no_alarm_note(prediction.attack_probability), source="no_alarm")
 
+    uncertain = prediction.attack_type in (None, UNCERTAIN)
     ctx = {
-        "attack_type": prediction.attack_type or "unbekannter Angriff",
-        "family": prediction.family or "unbekannt",
+        "uncertain": uncertain,  # the type model is not sure: the note must not name a type
+        "attack_type": "unklarer Angriffstyp" if uncertain else prediction.attack_type,
+        "family": "unklar" if uncertain else prediction.family,
         "type_confidence": prediction.type_confidence or 0.0,
         "attack_probability": prediction.attack_probability,
         "dst_port": values["Dst Port"],

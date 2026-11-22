@@ -10,7 +10,7 @@ RETRAIN_DAYS := [monday,tuesday,wednesday,thursday]
 RETRAIN_FUTURE := [friday]
 
 .PHONY: help setup data pipeline test lint format gate check \
-        stack stop llm register retrain rollout rollback replay demo evaluate-api evaluate-llm
+        stack stop llm register retrain rollout rollback replay note demo evaluate-api evaluate-llm
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -69,6 +69,9 @@ rollback: ## Point @champion to an older version and roll it out: make rollback 
 
 replay: ## Replay a capture day against the API: make replay DAY=thursday
 	$(UV_RUN) python -m ids.replay $(DAY)
+
+note: ## Analyst note for one real flow: make note DAY=friday LABEL=DDoS
+	$(UV_RUN) python -m ids.note $(DAY) "$(LABEL)"
 
 demo: ## Full live demo: make demo BEFORE=1 AFTER=2 (registry versions)
 	$(REGISTRY) python -m ids.demo --before $(BEFORE) --after $(AFTER)

@@ -22,10 +22,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-import pandas as pd
-
-from ids import replay, schema, timeline
-from ids.config import INTERIM_DIR
+from ids import note, replay, timeline
 from ids.registry import set_champion
 
 SCENES_FILE = Path("docs/images/live_demo_scenes.json")
@@ -44,31 +41,6 @@ def _rollout(version: str) -> None:
             pass
         time.sleep(1)
     sys.exit(f"API did not come back with model version {version}")
-
-
-def _ddos_flow() -> dict:
-    flows = pd.read_parquet(INTERIM_DIR / "friday.parquet")
-    flow = flows[flows[schema.LABEL] == "DDoS"].sample(1, random_state=1)[schema.FEATURES].astype(float)
-    return flow.iloc[0].to_dict()
-
-
-def _explain(flow: dict) -> dict:
-    request = urllib.request.Request(
-        f"{replay.API_URL}/explain",
-        data=json.dumps(flow).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=180) as response:
-        return json.load(response)
-
-
-def _explain_ddos() -> None:
-    """The analyst note for one DDoS flow while the drift monitor is firing."""
-    answer = _explain(_ddos_flow())
-    p = answer["prediction"]
-    print(f"true type: DDoS -> model: {p['attack_type']} ({p['family']}, {p['type_confidence']:.1%} sure), "
-          f"drift warning: {answer['drift_warning']}, note from: {answer['source']}")  # fmt: skip
-    print(f"note: {answer['note']}")
 
 
 def _replay(day: str, flows: int, rate: int) -> None:
@@ -93,13 +65,13 @@ def main() -> None:
     scene(f"rollback to v{args.before}")
     _rollout(args.before)
     print("warming up the LLM (loads the model into memory) ...")
-    print(f"  first note from: {_explain(_ddos_flow())['source']}")
+    print(f"  first note from: {note.explain(note.flow_of('friday', 'DDoS'))['source']}")
     scene("Wednesday: known attacks")
     _replay("wednesday", args.flows, args.rate)
     scene("Thursday: unseen attacks")
     _replay("thursday", args.flows, args.rate)
     scene("Analyst note for a DDoS flow")
-    _explain_ddos()
+    note.show("DDoS", note.explain(note.flow_of("friday", "DDoS")))
     print("waiting for Prometheus to fire the IdsDataDrift alert ...")
     time.sleep(30)
     scene(f"retrained v{args.after} rolled out")

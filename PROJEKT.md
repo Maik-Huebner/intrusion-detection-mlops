@@ -67,9 +67,11 @@ Freitag nach dem Retraining 99,1 % statt 37,3 %.
 - [x] Daten mit DVC versioniert, Pipeline mit `dvc repro`, Experimente mit `dvc exp run`
 - [x] Quality Gate in CI
 - [x] Model Registry in MLflow (Champion/Challenger, Rollback)
-- [x] Monitoring mit `/metrics`, Prometheus und Grafana (fünf Alarmregeln, fertiges Dashboard)
+- [x] Monitoring mit `/metrics`, Prometheus und Grafana (sechs Alarmregeln, fertiges Dashboard)
 - [x] Drift-Prüfung ohne Labels: offline als DVC-Stufe, live in der API
 - [x] Evaluation der API (Latenz p50/p95/p99, Durchsatz, Robustheit) mit MLflow
+- [x] LLM mit Ollama: Notiz für Analysten aus den Modell-Ergebnissen, sechs Regeln, Vorlage als Fallback, Prompt-Evaluation v1 → v2 (0 % → 92 %) in MLflow
+- [x] Zweites Modell für den Angriffstyp (99,99 % auf bekannten Typen)
 
 ## Risiken
 
@@ -86,6 +88,7 @@ Freitag nach dem Retraining 99,1 % statt 37,3 %.
 |---|---|
 | vorab (13.11.) | Repository, Daten, DVC-Pipeline, Training, Quality Gate, API, Dockerfile, CI |
 | vorab (22.11.) | Repository öffentlich, CI grün, Registry gegen MLflow-Server getestet, Monitoring, Drift-Prüfung, Live-Demo, Evaluation der API |
-| 21–23 | Feinschliff, Präsentation, Demo üben |
+| vorab (22.11., Teil 2) | Angriffstyp-Modell, LLM-Notiz mit Regeln und Fallback, Prompt-Evaluation |
+| 22–23 | Feinschliff, Präsentation, Demo üben |
 | 24 | README fertig, Präsentation, **Abgabe**: Git-Tag `abgabe` |
 | 25 | Präsentation (10 Minuten + 5 Minuten Fragen) |

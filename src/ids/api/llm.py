@@ -102,8 +102,13 @@ def _fmt(value: float) -> str:
 def build_prompt(ctx: dict) -> str:
     lines = [
         f"Detektor: Angriff mit Wahrscheinlichkeit {ctx['attack_probability']:.0%}.",
-        f"Angriffstyp-Modell: {ctx['attack_type']} (Familie {ctx['family']}, "
-        f"Sicherheit {ctx['type_confidence']:.0%}).",
+        (
+            f"Angriffstyp-Modell: kein bekannter Angriffstyp ist sicher genug (höchstens "
+            f"{ctx['type_confidence']:.0%}) - der Angriffstyp ist unklar."
+            if ctx.get("uncertain")
+            else f"Angriffstyp-Modell: {ctx['attack_type']} (Familie {ctx['family']}, "
+            f"Sicherheit {ctx['type_confidence']:.0%})."
+        ),
         f"Zielport {int(ctx['dst_port'])}, Protokoll {int(ctx['protocol'])}.",
         "Auffälligste Merkmale im Vergleich zu normalem Verkehr (normal = 10-90 % der harmlosen Flows):",
     ]
@@ -120,13 +125,20 @@ def build_prompt(ctx: dict) -> str:
     return "\n".join(lines)
 
 
+def _names(ctx: dict) -> list[str]:
+    """How a note may refer to the attack: its type or family - or, if uncertain, say so."""
+    if ctx.get("uncertain"):
+        return ["unklar", "unbekannt"]
+    return [ctx["attack_type"].lower(), ctx["family"].lower()]
+
+
 def check_rules(text: str, ctx: dict) -> dict[str, bool]:
     """Rules every note must pass (version ``RULES_VERSION``, same idea as the course's day 18)."""
     lower = text.lower()
     stripped = text.strip()
     others = [f for f in FAMILIES if f != ctx["family"] and f.lower() not in ctx["attack_type"].lower()]
     return {
-        "names_attack_type": ctx["attack_type"].lower() in lower or ctx["family"].lower() in lower,
+        "names_attack_type": any(n in lower for n in _names(ctx)),
         "no_other_attack_family": not any(re.search(rf"\b{re.escape(f.lower())}\b", lower) for f in others),
         "no_invented_identifiers": not (_IP.search(text) or _CVE.search(text) or _URL.search(text)),
         "drift_only_when_warned": ("drift" in lower) == ctx["drift_warning"],
