@@ -1,4 +1,4 @@
-"""Real-time scoring API.
+"""Real-time scoring API with Prometheus metrics and a live drift monitor.
 
 Run locally::
 
@@ -6,56 +6,105 @@ Run locally::
 
 Configuration (environment variables):
 
-* ``MODEL_URI``  MLflow model URI, e.g. ``models:/ids-detector@champion`` (needs MLFLOW_TRACKING_URI).
-                 If unset, the model file of the DVC pipeline is used.
-* ``MODEL_PATH`` path to a joblib model file (default ``models/model.joblib``).
-* ``THRESHOLD``  alarm threshold (default: ``evaluate.threshold`` from params.yaml, else 0.5).
+* ``MODEL_URI``    MLflow model URI, e.g. ``models:/ids-detector@champion`` (needs MLFLOW_TRACKING_URI).
+                   Rollout = move the alias in the registry, restart the API. If the registry cannot
+                   be reached, the API falls back to the baked-in model and reports it (``/model``,
+                   metric ``ids_model_info``) instead of not starting at all.
+* ``MODEL_PATH``   joblib model file (default ``models/model.joblib``)
+* ``PROFILE_PATH`` drift reference profile for that file (default ``models/reference_profile.json``)
+* ``THRESHOLD``    alarm threshold (default: ``evaluate.threshold`` from params.yaml, else 0.5)
 """
 
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ids import __version__, schema
-from ids.api.schemas import BatchRequest, BatchResponse, Flow, ModelInfo, Prediction
-from ids.config import MODEL_FILE, PARAMS_FILE, load_params
+from ids.api import monitoring as m
+from ids.api.schemas import BatchRequest, BatchResponse, DriftStatus, Flow, ModelInfo, Prediction
+from ids.config import MODEL_FILE, PARAMS_FILE, REFERENCE_PROFILE, load_params
+from ids.io import read_json
+
+log = logging.getLogger("uvicorn.error")
+DRIFT_DEFAULTS = {"feature_threshold": 0.2, "share_threshold": 0.1, "window": 1000}
 
 state: dict = {}
 
 
-def _load_model():
-    if uri := os.getenv("MODEL_URI"):
-        from ids.registry import load_registered_model  # needs the tracking group (mlflow)
-
-        return load_registered_model(uri), uri
+def _load_file_model() -> dict:
     path = Path(os.getenv("MODEL_PATH", str(MODEL_FILE)))
-    return joblib.load(path), str(path)
+    profile_path = Path(os.getenv("PROFILE_PATH", str(REFERENCE_PROFILE)))
+    return {
+        "model": joblib.load(path),
+        "profile": read_json(profile_path) if profile_path.exists() else None,
+        "source": str(path),
+        "version": "file",
+    }
 
 
-def _threshold() -> float:
-    if value := os.getenv("THRESHOLD"):
-        return float(value)
-    return float(load_params("evaluate")["threshold"]) if PARAMS_FILE.exists() else 0.5
+def _load_model() -> dict:
+    if uri := os.getenv("MODEL_URI"):
+        try:
+            from ids.registry import load_serving_bundle  # needs mlflow (api group: mlflow-skinny)
+
+            return load_serving_bundle(uri) | {"fallback": False}
+        except Exception as exc:  # registry down, alias missing, ...: keep detecting with what we have
+            log.error("could not load %s (%s) - serving the baked-in model instead", uri, exc)
+            return _load_file_model() | {"fallback": True}
+    return _load_file_model() | {"fallback": False}
+
+
+def _settings() -> tuple[float, dict]:
+    params = load_params() if PARAMS_FILE.exists() else {}
+    threshold = float(os.getenv("THRESHOLD") or params.get("evaluate", {}).get("threshold", 0.5))
+    return threshold, DRIFT_DEFAULTS | params.get("drift", {})
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    state["model"], state["source"] = _load_model()  # once at startup, not per request
-    state["threshold"] = _threshold()
+    state.update(_load_model())  # once at startup, not per request
+    state["threshold"], drift = _settings()
+    state["monitor"] = (
+        m.DriftMonitor(
+            state["profile"], drift["feature_threshold"], drift["share_threshold"], drift["window"]
+        )
+        if state["profile"]
+        else None
+    )
+    m.MODEL.info(
+        {"source": state["source"], "version": state["version"], "fallback": str(state["fallback"]).lower()}
+    )
+    log.info("serving %s (version %s), drift monitoring %s", state["source"], state["version"],
+             "on" if state["monitor"] else "off")  # fmt: skip
     yield
     state.clear()
 
 
 app = FastAPI(
     title="Intrusion Detection API",
-    description="Scores network flows (CICFlowMeter features) as benign or attack.",
+    description="Scores network flows (CICFlowMeter features) as benign or attack, and watches for drift.",
     version=__version__,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def record_metrics(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    route = request.scope.get("route")
+    path = route.path if route else "unmatched"  # route template: no unbounded label values
+    if path != "/metrics":
+        m.REQUESTS.labels(path, request.method, str(response.status_code)).inc()
+        m.LATENCY.labels(path).observe(time.perf_counter() - start)
+    return response
 
 
 def _predict(flows: list) -> list[Prediction]:
@@ -64,10 +113,18 @@ def _predict(flows: list) -> list[Prediction]:
         probabilities = state["model"].predict_proba(frame)[:, 1]
     except Exception as exc:  # e.g. a model trained on a different feature set
         raise HTTPException(status_code=500, detail=f"model could not score the request: {exc}") from exc
-    threshold = state["threshold"]
+
+    alarms = probabilities >= state["threshold"]
+    m.FLOWS.labels("attack").inc(int(alarms.sum()))
+    m.FLOWS.labels("benign").inc(int((~alarms).sum()))
+    for p in probabilities:
+        m.PROBABILITY.observe(float(p))
+    if state["monitor"]:
+        state["monitor"].observe(frame[~alarms])
+
     return [
-        Prediction(is_attack=bool(p >= threshold), attack_probability=round(float(p), 4))
-        for p in probabilities
+        Prediction(is_attack=bool(alarm), attack_probability=round(float(p), 4))
+        for p, alarm in zip(probabilities, alarms, strict=True)
     ]
 
 
@@ -78,7 +135,31 @@ def health() -> dict:
 
 @app.get("/model", tags=["info"])
 def model_info() -> ModelInfo:
-    return ModelInfo(source=state["source"], threshold=state["threshold"], features=len(schema.FEATURES))
+    return ModelInfo(
+        source=state["source"],
+        version=state["version"],
+        fallback=state["fallback"],
+        threshold=state["threshold"],
+        features=len(schema.FEATURES),
+        drift_monitoring=state["monitor"] is not None,
+    )
+
+
+@app.get("/drift", tags=["info"])
+def drift_status() -> DriftStatus:
+    """Current result of the live drift monitor (also exported as Prometheus metrics)."""
+    monitor = state["monitor"]
+    if monitor is None:
+        raise HTTPException(status_code=404, detail="no reference profile loaded: drift monitoring is off")
+    last = monitor.last or {}
+    return DriftStatus(window_flows=len(monitor.window), drift=last.get("drift"), **{
+        k: last[k] for k in ("drift_share", "drifted_features", "top_features") if k in last
+    })  # fmt: skip
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/predict", tags=["scoring"])

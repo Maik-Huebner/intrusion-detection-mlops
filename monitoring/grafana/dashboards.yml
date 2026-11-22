@@ -1,0 +1,8 @@
+# Grafana loads every dashboard JSON from this folder inside the container.
+apiVersion: 1
+providers:
+  - name: intrusion-detection
+    folder: Intrusion Detection
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

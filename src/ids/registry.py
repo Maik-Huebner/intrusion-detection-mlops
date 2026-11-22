@@ -19,6 +19,7 @@ The tracking server comes from ``MLFLOW_TRACKING_URI`` (default: local ``mlflow.
 
 import argparse
 import os
+from pathlib import Path
 
 import joblib
 import mlflow
@@ -27,7 +28,7 @@ from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
 
 from ids import schema
-from ids.config import METRICS_FILE, MODEL_FILE, PREPARED_DIR, REPORTS_DIR, load_params
+from ids.config import METRICS_FILE, MODEL_FILE, PREPARED_DIR, REFERENCE_PROFILE, REPORTS_DIR, load_params
 from ids.io import read_json
 from ids.lineage import data_versions, flatten, git_state
 from ids.metrics import detection_metrics
@@ -72,6 +73,8 @@ def log_run() -> str:
         for path in sorted(REPORTS_DIR.glob("*")):
             mlflow.log_artifact(str(path), artifact_path="reports")
         mlflow.log_artifact("dvc.lock")
+        if REFERENCE_PROFILE.exists():  # the drift reference travels with the model version
+            mlflow.log_artifact(str(REFERENCE_PROFILE))
 
         model = joblib.load(MODEL_FILE)
         example = pd.read_parquet(PREPARED_DIR / "test.parquet").head(5)[schema.FEATURES]
@@ -83,6 +86,35 @@ def log_run() -> str:
     client.set_model_version_tag(MODEL_NAME, version, "run_id", run.info.run_id)
     print(f"run {run.info.run_id} ({run_name}) -> {MODEL_NAME} version {version}")
     return version
+
+
+def load_serving_bundle(model_uri: str) -> dict:
+    """Everything the API needs from a registered model: the model, its version and drift profile.
+
+    ``model_uri`` is ``models:/<name>@<alias>`` or ``models:/<name>/<version>``.
+    """
+    client = _client()
+    name, _, ref = model_uri.removeprefix("models:/").partition("/")
+    if "@" in name:
+        name, alias = name.split("@", 1)
+        version = client.get_model_version_by_alias(name, alias)
+    else:
+        version = client.get_model_version(name, ref)
+
+    profile = None
+    try:
+        path = mlflow.artifacts.download_artifacts(
+            run_id=version.run_id, artifact_path=REFERENCE_PROFILE.name
+        )
+        profile = read_json(Path(path))
+    except (MlflowException, OSError):
+        print(f"no {REFERENCE_PROFILE.name} logged with {name} v{version.version}: drift monitoring off")
+    return {
+        "model": load_registered_model(f"models:/{name}/{version.version}"),
+        "profile": profile,
+        "source": model_uri,
+        "version": str(version.version),
+    }
 
 
 def _f1_on_recent_data(model_uri: str) -> float | None:

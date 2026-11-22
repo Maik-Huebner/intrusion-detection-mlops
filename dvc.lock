@@ -151,12 +151,54 @@ stages:
       hash: md5
       md5: 98fe6b72438695af0b37392a1812c2d2
       size: 4700
+    - path: reports/drift.json
+      hash: md5
+      md5: dbe14ba4e1f82f8602507868ff7bc4eb
+      size: 1611
     - path: src/ids/pipeline/plots.py
       hash: md5
-      md5: be964644cb16ceecd686c5fc84ed8199
-      size: 2644
+      md5: c436149160d44153ccb5a9e33955aaae
+      size: 4663
     outs:
     - path: reports/detection_by_attack.svg
       hash: md5
       md5: 25019318e955de28c3807ead9af33a7e
       size: 16942
+    - path: reports/drift_by_day.svg
+      hash: md5
+      md5: f2f78c627685011ec36cafbf1b969aa4
+      size: 12241
+  drift:
+    cmd: python -m ids.pipeline.drift
+    deps:
+    - path: data/prepared
+      hash: md5
+      md5: e26b56bb8357bbe40de5399eed2d240a.dir
+      size: 264562895
+      nfiles: 3
+    - path: models/model.joblib
+      hash: md5
+      md5: c470143a1a60a07be12904f3e153cedb
+      size: 717008
+    - path: src/ids/drift.py
+      hash: md5
+      md5: a4a312b9a068fdefa1929df837cbbaf7
+      size: 3173
+    - path: src/ids/pipeline/drift.py
+      hash: md5
+      md5: 542d62061085f4a487958d0a4b1762cf
+      size: 2455
+    params:
+      params.yaml:
+        drift.feature_threshold: 0.2
+        drift.share_threshold: 0.1
+        evaluate.threshold: 0.5
+    outs:
+    - path: models/reference_profile.json
+      hash: md5
+      md5: 64bcf4cd09bb126b4f55c337ad1c54b6
+      size: 23024
+    - path: reports/drift.json
+      hash: md5
+      md5: dbe14ba4e1f82f8602507868ff7bc4eb
+      size: 1611

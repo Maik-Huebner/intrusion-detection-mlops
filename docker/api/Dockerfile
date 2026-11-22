@@ -27,10 +27,10 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
-# The model is baked in: one image = one immutable, testable model version.
-# (Alternatively set MODEL_URI to load the @champion from the MLflow registry at startup.)
+# A model is baked in as a safe default: the image always works on its own. In the compose stack
+# MODEL_URI points to the registry @champion instead, and this model is only the fallback.
 COPY params.yaml ./
-COPY models/model.joblib ./models/model.joblib
+COPY models/model.joblib models/reference_profile.json ./models/
 
 USER app
 EXPOSE 8000

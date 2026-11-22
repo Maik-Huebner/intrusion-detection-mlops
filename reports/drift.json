@@ -1,0 +1,60 @@
+{
+  "future_friday": {
+    "drift": true,
+    "drift_share": 0.4699,
+    "drifted_features": 39,
+    "hidden_attacks": 159913,
+    "passed_as_benign": 452418,
+    "top_features": {
+      "Bwd Packet Length Max": 0.6499,
+      "Bwd Packets/s": 0.7266,
+      "Flow Duration": 0.7578,
+      "Flow IAT Max": 0.7631,
+      "Flow IAT Mean": 0.6489,
+      "Flow Packets/s": 0.7353,
+      "Fwd Packets/s": 0.7358,
+      "Packet Length Max": 0.6632,
+      "Packet Length Std": 0.7123,
+      "Packet Length Variance": 0.7123
+    }
+  },
+  "future_thursday": {
+    "drift": true,
+    "drift_share": 0.2892,
+    "drifted_features": 24,
+    "hidden_attacks": 71902,
+    "passed_as_benign": 361918,
+    "top_features": {
+      "Bwd Packet Length Max": 0.2678,
+      "FWD Init Win Bytes": 0.4792,
+      "Flow Duration": 0.36,
+      "Flow IAT Max": 0.3682,
+      "Flow IAT Mean": 0.3513,
+      "Flow Packets/s": 0.3491,
+      "Fwd Packets/s": 0.3495,
+      "Packet Length Max": 0.2767,
+      "Packet Length Std": 0.299,
+      "Packet Length Variance": 0.299
+    }
+  },
+  "reference_benign_flows": 743302,
+  "test": {
+    "drift": false,
+    "drift_share": 0.0,
+    "drifted_features": 0,
+    "hidden_attacks": 1,
+    "passed_as_benign": 185827,
+    "top_features": {
+      "Bwd IAT Min": 0.0001,
+      "Bwd Packet Length Max": 0.0001,
+      "Bwd Packet Length Mean": 0.0001,
+      "Bwd Segment Size Avg": 0.0001,
+      "Flow Bytes/s": 0.0001,
+      "Flow IAT Mean": 0.0001,
+      "Fwd IAT Min": 0.0001,
+      "Subflow Bwd Bytes": 0.0001,
+      "Total Bwd packets": 0.0001,
+      "Total Length of Bwd Packet": 0.0001
+    }
+  }
+}

@@ -19,6 +19,13 @@ evaluate:
   # Alarm if P(attack) >= threshold
   threshold: 0.5
 
+# Label-free drift monitoring (offline in the `drift` stage, online in the API).
+# Watched: the flows the model lets through as benign, compared with benign training traffic.
+drift:
+  feature_threshold: 0.2  # PSI above this: the feature has drifted
+  share_threshold: 0.1    # more than 10 % drifted features: the traffic has drifted
+  window: 1000            # API: sliding window of the most recent "benign" flows
+
 # Promotion thresholds, checked on the test set by `python -m ids.quality_gate`.
 # Not a DVC stage: changing them does not retrain anything.
 quality_gate:

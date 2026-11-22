@@ -1,4 +1,4 @@
-# prepare -> validate -> split -> train -> evaluate -> plots
+# prepare -> validate -> split -> train -> evaluate + drift -> plots
 # Run with: uv run dvc repro
 
 stages:
@@ -63,11 +63,30 @@ stages:
       - reports/detection.json:
           cache: false
 
+  drift:
+    cmd: python -m ids.pipeline.drift
+    deps:
+      - src/ids/pipeline/drift.py
+      - src/ids/drift.py
+      - data/prepared
+      - models/model.joblib
+    params:
+      - drift.feature_threshold
+      - drift.share_threshold
+      - evaluate.threshold
+    outs:
+      - models/reference_profile.json
+      - reports/drift.json:
+          cache: false
+
   plots:
     cmd: python -m ids.pipeline.plots
     deps:
       - src/ids/pipeline/plots.py
       - reports/detection.json
+      - reports/drift.json
     outs:
       - reports/detection_by_attack.svg:
+          cache: false
+      - reports/drift_by_day.svg:
           cache: false

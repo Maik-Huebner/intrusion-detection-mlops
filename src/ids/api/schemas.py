@@ -80,5 +80,16 @@ class BatchResponse(BaseModel):
 
 class ModelInfo(BaseModel):
     source: str = Field(description="Where the model was loaded from (file path or MLflow model URI)")
+    version: str = Field(description="Registry version, or 'file' for the model baked into the image")
+    fallback: bool = Field(description="True if MODEL_URI could not be loaded and the baked-in model serves")
     threshold: float
     features: int
+    drift_monitoring: bool = Field(description="True if a reference profile for drift monitoring is loaded")
+
+
+class DriftStatus(BaseModel):
+    window_flows: int = Field(description="Flows scored as benign in the sliding window")
+    drift: bool | None = Field(description="None until the window holds enough flows")
+    drift_share: float | None = None
+    drifted_features: int | None = None
+    top_features: dict[str, float] = {}

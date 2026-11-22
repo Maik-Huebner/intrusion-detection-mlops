@@ -1,6 +1,6 @@
 [project]
 name = "intrusion-detection-mlops"
-version = "0.1.0"
+version = "0.2.0"
 description = "Network intrusion detection on the corrected CIC-IDS2017 dataset, with an end-to-end MLOps lifecycle: DVC, MLflow, FastAPI, Docker and GitHub Actions."
 readme = "README.md"
 license = "MIT"
@@ -33,6 +33,10 @@ tracking = [
 api = [
     "fastapi==0.162.0",
     "uvicorn==0.54.0",
+    "prometheus-client==0.26.0",
+    # Load the @champion from the registry: the client part of MLflow plus skops for the model file.
+    "mlflow-skinny==3.17.2",
+    "skops==0.16.0",
 ]
 notebook = [
     "ipykernel==7.4.0",
