@@ -8,9 +8,12 @@ WORKDIR /mlflow
 
 EXPOSE 5000
 # SQLite backend for runs and registry, artifacts (models, reports) proxied by the server.
+# --allowed-hosts: MLflow rejects unknown Host headers (DNS rebinding protection). The API calls the
+# server as http://mlflow:5000 inside the compose network, so that name is allowed next to localhost.
 CMD ["mlflow", "server", \
      "--host", "0.0.0.0", \
      "--port", "5000", \
+     "--allowed-hosts", "mlflow:5000,localhost:*,127.0.0.1:*", \
      "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
      "--artifacts-destination", "/mlflow/artifacts", \
      "--serve-artifacts"]
