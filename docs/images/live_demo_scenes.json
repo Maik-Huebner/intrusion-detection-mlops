@@ -1,0 +1,26 @@
+[
+  {
+    "time": 1795354253.85548,
+    "label": "rollback to v3"
+  },
+  {
+    "time": 1795354257.627787,
+    "label": "Wednesday: known attacks"
+  },
+  {
+    "time": 1795354290.4235258,
+    "label": "Thursday: unseen attacks"
+  },
+  {
+    "time": 1795354361.592152,
+    "label": "retrained v4 rolled out"
+  },
+  {
+    "time": 1795354364.6870341,
+    "label": "Friday: never seen by either model"
+  },
+  {
+    "time": 1795354396.3974369,
+    "label": "end"
+  }
+]

@@ -19,7 +19,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Data drift in the traffic scored as benign ({{ $value }}) - possible unseen attack, consider retraining."
+          summary: "Data drift in the traffic scored as benign - possible unseen attack type, consider retraining."
 
       - alert: IdsModelFallback
         # MODEL_URI could not be loaded at startup; the API serves the model baked into the image.

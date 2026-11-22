@@ -1,0 +1,21 @@
+{
+  "detection_rate": 0.9972,
+  "f1": 0.9986,
+  "false_alarm_rate": 0.0,
+  "latency_p50_ms": 6.2,
+  "latency_p95_ms": 41.2,
+  "latency_p99_ms": 62.8,
+  "model_source": "models:/ids-detector@champion",
+  "model_version": "4",
+  "robustness": {
+    "batch too large": 422,
+    "empty batch": 422,
+    "missing feature": 422,
+    "negative counter": 422,
+    "port out of range": 422,
+    "text instead of number": 422
+  },
+  "robustness_rejected_422": "6/6",
+  "test_flows": 20000,
+  "throughput_flows_per_s": 13604
+}

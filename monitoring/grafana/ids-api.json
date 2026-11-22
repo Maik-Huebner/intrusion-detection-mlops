@@ -110,7 +110,9 @@
             "uid": "prometheus"
           },
           "expr": "ids_model_info",
-          "legendFormat": "v{{version}}"
+          "legendFormat": "v{{version}}",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -525,8 +527,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "topk(10, ids_feature_psi)",
-          "legendFormat": "{{feature}}"
+          "expr": "sort_desc(topk(10, ids_feature_psi))",
+          "legendFormat": "{{feature}}",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -564,8 +568,7 @@
         "orientation": "horizontal",
         "displayMode": "gradient",
         "showUnfilled": true
-      },
-      "instant": true
+      }
     },
     {
       "id": 10,
