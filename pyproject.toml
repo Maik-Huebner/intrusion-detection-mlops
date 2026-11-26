@@ -7,10 +7,10 @@ license = "MIT"
 authors = [{ name = "Maik Hübner" }]
 requires-python = ">=3.12"
 dependencies = [
-    "numpy==2.5.4",
-    "pandas==3.1.0",
+    "numpy==2.5.5",
+    "pandas==3.1.1",
     "pyarrow==25.0.1",
-    "pyyaml==6.0.3",
+    "pyyaml==6.0.4",
     "scikit-learn==1.9.1",
 ]
 
@@ -18,10 +18,10 @@ dependencies = [
 # Groups keep CI jobs lean: each job installs only what it needs (uv sync --only-group / --group).
 test = [
     "pytest==9.2.0",
-    "httpx2==2.16.0",  # FastAPI TestClient backend
+    "httpx2==2.16.2",  # FastAPI TestClient backend
 ]
 lint = [
-    "ruff==0.17.5",
+    "ruff==0.17.6",
 ]
 pipeline = [
     "dvc==3.67.1",
@@ -31,14 +31,14 @@ tracking = [
     "mlflow==3.17.2",
 ]
 api = [
-    "fastapi==0.162.0",
+    "fastapi==0.165.0",
     "uvicorn==0.54.0",
     "prometheus-client==0.26.0",
     # Load the @champion from the registry: the client part of MLflow plus skops for the model file.
     "mlflow-skinny==3.17.2",
     "skops==0.16.0",
-    "anthropic==2.8.0",  # analyst notes with Claude
-    "openai==3.52.0",  # optional: analyst notes via a local OpenAI-compatible LLM (Ollama)
+    "anthropic==2.13.0",  # analyst notes with Claude
+    "openai==3.57.0",  # optional: analyst notes via a local OpenAI-compatible LLM (Ollama)
 ]
 notebook = [
     "ipykernel==7.4.0",
