@@ -591,5 +591,5 @@ Dinge, die erst beim Bauen aufgefallen sind – und für die die MLOps-Werkzeuge
 - I. Sharafaldin, A. H. Lashkari, A. A. Ghorbani: *Toward Generating a New Intrusion Detection Dataset
   and Intrusion Traffic Characterization*. ICISSP 2018.
 
-Entstanden als Abschlussprojekt der Weiterbildung *AI Engineer* (IfaDW), Block „ML Apps Deployment“.
+Entstanden als Abschlussprojekt der Weiterbildung *AI Engineer* (IfaDW), Block „MLOps Deployment“.
 Code unter MIT-Lizenz. Für den Datensatz gelten die Bedingungen seiner Autoren.
