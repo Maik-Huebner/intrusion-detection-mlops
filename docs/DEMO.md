@@ -56,7 +56,7 @@ make note DAY=friday LABEL=DDoS
 | 1:25 | `make note DAY=friday LABEL=DDoS` | Terminal: wahres Label DDoS, Typ-Modell sagt **DoS Hulk, 99,9 % sicher** – falsch. Die Notiz endet mit „**Achtung, Drift:** Die Zuordnung kann falsch sein“. „Das LLM entscheidet nichts, es formuliert – und es weiß vom Drift-Monitor.“ |
 | 1:55 | `make rollback V=6` | Tab 3: `@champion` zeigt auf v6. „Das Modell mit Donnerstag ist schon trainiert und hat den Champion/Challenger-Vergleich gewonnen – Rollout ist nur ein Neustart der API.“ Grafana: Version springt auf **v6**. |
 | 2:20 | `make replay DAY=friday` | Terminal: **99 % erkannt**, Freitag hat keines der Modelle je gesehen. Grafana: Drift wieder OK. |
-| 2:50 | Browser: `https://ids.178-104-83-110.sslip.io/model` | „Und das alles läuft auch öffentlich: Jeder Push auf main wird getestet, neu trainiert, gescannt und automatisch ausgerollt – hier steht der Commit, der gerade läuft.“ |
+| 2:50 | Browser: `https://ids.178-104-83-110.sslip.io/` | „Und das alles läuft auch öffentlich: Jeder Push auf main wird getestet, neu trainiert, gescannt und automatisch ausgerollt.“ Kachel **Modell** zeigt den Commit; auf **Neuer Angriff** klicken – Claude-Notiz mit Drift-Warnung live vom Server. |
 | 3:05 | – | „Daten, Pipeline, Registry, Monitoring, Notiz, Rollout, Deployment – der Kreislauf ist geschlossen.“ |
 
 Hinweise:
