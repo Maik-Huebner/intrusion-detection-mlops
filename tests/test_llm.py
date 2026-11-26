@@ -89,11 +89,19 @@ def test_template_notes():
     assert llm.no_alarm_note(0.01).startswith("Kein Alarm")
 
 
-def test_not_configured_without_base_url(monkeypatch):
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+def test_provider_follows_the_configuration(monkeypatch):
+    for var in ("LLM_BASE_URL", "LLM_PROVIDER", "ANTHROPIC_API_KEY", "LLM_MODEL"):
+        monkeypatch.delenv(var, raising=False)
     assert llm.is_configured() is False
     monkeypatch.setenv("LLM_BASE_URL", "http://ollama:11434/v1")
-    assert llm.is_configured() is True
+    assert llm.settings()["provider"] == "openai" and llm.is_configured()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    assert llm.settings()["provider"] == "anthropic" and llm.settings()["model"] == "claude-opus-5-5"
+    monkeypatch.setenv("LLM_PROVIDER", "off")
+    assert llm.is_configured() is False
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    assert llm.is_configured() is False  # Claude without a key: template notes
 
 
 def test_uncertain_type_must_be_called_unclear():
@@ -103,3 +111,75 @@ def test_uncertain_type_must_be_called_unclear():
         "names_attack_type"
     ]
     assert not llm.check_rules("Ein uncertain-Angriff der Familie uncertain.", ctx)["names_attack_type"]
+
+
+def test_budget_per_minute_and_per_day():
+    from datetime import date
+
+    budget = llm.Budget(per_minute=2, per_day=3)
+    day = date(2026, 11, 26)
+    assert budget.allow(0, day) and budget.allow(1, day)
+    assert not budget.allow(2, day)  # third call within a minute
+    assert budget.allow(61, day)  # a minute later
+    assert not budget.allow(200, day)  # daily limit reached
+    assert budget.allow(300, date(2026, 11, 27))  # new day
+
+
+class _Block:
+    def __init__(self, type_, text=""):
+        self.type, self.text = type_, text
+
+
+class _FakeMessages:
+    def __init__(self, stop_reason, calls):
+        self.stop_reason, self.calls = stop_reason, calls
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+
+        class Usage:
+            input_tokens, output_tokens = 700, 120
+
+        class Answer:
+            stop_reason = self.stop_reason
+            model = kwargs["model"]
+            usage = Usage()
+            content = [_Block("thinking"), _Block("text", "Hier ist die Notiz: " + GOOD)]
+
+        return Answer()
+
+
+def _fake_anthropic(monkeypatch, stop_reason="end_turn"):
+    import anthropic
+
+    calls = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.beta = type("Beta", (), {"messages": _FakeMessages(stop_reason, calls)})()
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    for var in ("LLM_PROVIDER", "LLM_MODEL", "LLM_EFFORT"):
+        monkeypatch.delenv(var, raising=False)
+    return calls
+
+
+def test_claude_note_is_cleaned_and_counted(monkeypatch):
+    calls = _fake_anthropic(monkeypatch)
+    answer = llm.generate(CTX)
+    assert answer["text"] == GOOD and answer["tokens"] == 820 and answer["llm_model"] == "claude-opus-5-5"
+    request = calls[0]
+    assert request["output_config"] == {"effort": "low"} and request["fallbacks"] == "default"
+    assert "temperature" not in request  # removed from the current API
+    assert "SSH-Patator" in request["messages"][0]["content"]
+
+
+def test_claude_refusal_falls_back(monkeypatch):
+    _fake_anthropic(monkeypatch, stop_reason="refusal")
+    try:
+        llm.generate(CTX)
+    except llm.NoNoteError as exc:
+        assert str(exc) == "refusal"
+    else:
+        raise AssertionError("a refusal must not become a note")

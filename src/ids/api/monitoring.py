@@ -38,7 +38,7 @@ MODEL = Info("ids_model", "The model the API serves")
 ALARMS_BY_FAMILY = Counter("ids_alarms_by_family_total", "Alarms by predicted attack family", ["family"])
 
 # --- LLM analyst notes -----------------------------------------------------------------------------
-# result: ok | rejected (broke a rule) | error (timeout, unreachable) | not_configured
+# result: ok | rejected (broke a rule) | error (timeout, unreachable, refusal) | budget | not_configured
 LLM_REQUESTS = Counter("ids_llm_requests_total", "Analyst note requests by result", ["result"])
 LLM_ERRORS = Counter("ids_llm_errors_total", "LLM errors by exception type", ["kind"])
 LLM_LATENCY = Histogram(

@@ -13,7 +13,8 @@ Configuration (environment variables):
 * ``MODEL_PATH``   joblib model file (default ``models/model.joblib``)
 * ``PROFILE_PATH`` drift reference profile for that file (default ``models/reference_profile.json``)
 * ``FAMILY_PATH``  attack type model for that file (default ``models/family.joblib``)
-* ``LLM_*``        analyst notes via an OpenAI-compatible LLM, see ``ids.api.llm``
+* ``LLM_*``        analyst notes with Claude (or a local LLM), budget per minute/day, see ``ids.api.llm``
+* ``REVISION``     Git commit the image was built from (set by the CD pipeline), shown in ``/model``
 * ``THRESHOLD``    alarm threshold (default: ``evaluate.threshold`` from params.yaml, else 0.5)
 """
 
@@ -26,6 +27,8 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ids import __version__, schema
@@ -88,6 +91,8 @@ def _settings() -> tuple[float, dict, float]:
 async def lifespan(_: FastAPI):
     state.update(_load_model())  # once at startup, not per request
     state["threshold"], drift, state["min_confidence"] = _settings()
+    state["revision"] = os.getenv("REVISION", "dev")
+    state["budget"] = llm.Budget.from_env()
     state["monitor"] = (
         m.DriftMonitor(
             state["profile"], drift["feature_threshold"], drift["share_threshold"], drift["window"]
@@ -96,11 +101,17 @@ async def lifespan(_: FastAPI):
         else None
     )
     m.MODEL.info(
-        {"source": state["source"], "version": state["version"], "fallback": str(state["fallback"]).lower()}
+        {
+            "source": state["source"],
+            "version": state["version"],
+            "fallback": str(state["fallback"]).lower(),
+            "revision": state["revision"],
+        }  # fmt: skip
     )
     log.info("serving %s (version %s), drift monitoring %s, attack types %s, LLM notes %s", state["source"],
              state["version"], "on" if state["monitor"] else "off", "on" if state["family_model"] else "off",
              llm.settings()["model"] if llm.is_configured() else "off (templates)")  # fmt: skip
+    log.info("revision %s", state["revision"])
     yield
     state.clear()
 
@@ -111,6 +122,14 @@ app = FastAPI(
     version=__version__,
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """422 without echoing the input: NaN would break the JSON response (500), and reflecting
+    request data back is unnecessary exposure."""
+    errors = [{k: e[k] for k in ("type", "loc", "msg") if k in e} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors[:20]})
 
 
 @app.middleware("http")
@@ -165,6 +184,7 @@ def model_info() -> ModelInfo:
     return ModelInfo(
         source=state["source"],
         version=state["version"],
+        revision=state["revision"],
         fallback=state["fallback"],
         threshold=state["threshold"],
         features=len(schema.FEATURES),
@@ -230,12 +250,15 @@ def explain(flow: Flow) -> Explanation:  # type: ignore[valid-type]
     if not llm.is_configured():
         m.LLM_REQUESTS.labels("not_configured").inc()
         return Explanation(**base, **fallback, reason="not_configured")
+    if not state["budget"].allow():  # protects the bill of a public endpoint
+        m.LLM_REQUESTS.labels("budget").inc()
+        return Explanation(**base, **fallback, reason="budget")
     try:
         answer = llm.generate(ctx)
     except Exception as exc:  # timeout, connection refused, rate limit ...: the analyst still gets a note
         m.LLM_REQUESTS.labels("error").inc()
         m.LLM_ERRORS.labels(type(exc).__name__).inc()
-        log.warning("LLM failed (%s) - template note", exc)
+        log.warning("LLM failed (%s) - template note", type(exc).__name__)  # no message: may echo input
         return Explanation(**base, **fallback, reason=type(exc).__name__)
 
     m.LLM_LATENCY.observe(answer["seconds"])

@@ -24,7 +24,7 @@ from collections import Counter
 
 import pandas as pd
 
-from ids import schema
+from ids import schema, web
 from ids.api import llm
 from ids.config import PREPARED_DIR, REPORTS_DIR
 from ids.io import write_json
@@ -34,10 +34,10 @@ EXPERIMENT = "ids-llm-evaluation"
 
 
 def _explain(flow: dict) -> dict:
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - opened with web.urlopen
         f"{API_URL}/explain", data=json.dumps(flow).encode(), headers={"Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(request, timeout=300) as response:
+    with web.urlopen(request, timeout=300) as response:
         return json.load(response)
 
 

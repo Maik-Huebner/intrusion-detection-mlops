@@ -21,11 +21,17 @@ RUN uv sync --locked --no-default-groups --group api --no-editable
 
 
 FROM python:3.12-slim
+LABEL org.opencontainers.image.source="https://github.com/Maik-Huebner/intrusion-detection-mlops" \
+      org.opencontainers.image.description="Intrusion detection scoring API" \
+      org.opencontainers.image.licenses="MIT"
 RUN useradd --create-home --uid 10001 app
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
+ARG REVISION=dev
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    REVISION=$REVISION
 
 # A model is baked in as a safe default: the image always works on its own. In the compose stack
 # MODEL_URI points to the registry @champion instead, and this model is only the fallback.
@@ -36,4 +42,4 @@ USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-CMD ["uvicorn", "ids.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "ids.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]

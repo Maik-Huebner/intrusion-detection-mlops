@@ -13,8 +13,11 @@ mlflow.db
 mlruns/
 mlartifacts/
 
-# Secrets
+# Secrets (API keys): never in Git. local.env holds only non-secret settings.
 .env
+secrets.env
+*.pem
+*_ed25519
 
 # Editor and OS
 .vscode/
@@ -26,3 +29,4 @@ mlartifacts/
 
 # Batch prediction output (reproducible at any time)
 output/
+docs/*.pptx

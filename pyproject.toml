@@ -37,7 +37,8 @@ api = [
     # Load the @champion from the registry: the client part of MLflow plus skops for the model file.
     "mlflow-skinny==3.17.2",
     "skops==0.16.0",
-    "openai==3.52.0",  # analyst notes via any OpenAI-compatible LLM (Ollama in the stack)
+    "anthropic==2.8.0",  # analyst notes with Claude
+    "openai==3.52.0",  # optional: analyst notes via a local OpenAI-compatible LLM (Ollama)
 ]
 notebook = [
     "ipykernel==7.4.0",
@@ -66,4 +67,8 @@ line-length = 110
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "SIM", "N", "PD", "NPY"]
+# S = flake8-bandit security rules (also checked in CI)
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "N", "PD", "NPY", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "S108", "S311"]  # asserts, fake keys and random data are fine in tests

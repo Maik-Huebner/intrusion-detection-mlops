@@ -43,7 +43,7 @@ def git_state() -> dict[str, str]:
     """Current commit and whether the working tree has uncommitted changes."""
 
     def git(*args: str) -> str:
-        return subprocess.run(["git", *args], capture_output=True, text=True, check=False).stdout.strip()
+        return subprocess.run(["git", *args], capture_output=True, text=True, check=False).stdout.strip()  # noqa: S603, S607
 
     return {
         "git.commit": git("rev-parse", "HEAD") or "unknown",

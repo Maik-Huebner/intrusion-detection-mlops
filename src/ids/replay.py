@@ -21,22 +21,22 @@ import urllib.request
 import numpy as np
 import pandas as pd
 
-from ids import schema
+from ids import schema, web
 from ids.config import INTERIM_DIR
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 
 def _post(path: str, body: dict) -> dict:
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - opened with web.urlopen
         f"{API_URL}{path}", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with web.urlopen(request, timeout=30) as response:
         return json.load(response)
 
 
 def _get(path: str) -> dict:
-    with urllib.request.urlopen(f"{API_URL}{path}", timeout=10) as response:
+    with web.urlopen(f"{API_URL}{path}", timeout=10) as response:
         return json.load(response)
 
 

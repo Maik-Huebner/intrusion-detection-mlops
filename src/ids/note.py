@@ -16,7 +16,7 @@ import urllib.request
 
 import pandas as pd
 
-from ids import schema
+from ids import schema, web
 from ids.config import INTERIM_DIR
 from ids.replay import API_URL
 
@@ -32,10 +32,10 @@ def flow_of(day: str, label: str, seed: int = 1) -> dict:
 
 
 def explain(flow: dict) -> dict:
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - opened with web.urlopen
         f"{API_URL}/explain", data=json.dumps(flow).encode(), headers={"Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with web.urlopen(request, timeout=180) as response:
         return json.load(response)
 
 

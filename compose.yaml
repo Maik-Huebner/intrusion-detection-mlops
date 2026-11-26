@@ -5,7 +5,10 @@
 #   api         scoring API, serves the registry @champion      http://localhost:8000/docs
 #   prometheus  scrapes the API's /metrics, evaluates alerts    http://localhost:9090
 #   grafana     SOC & MLOps dashboard                           http://localhost:3000 (GRAFANA_PORT)
-#   ollama      local LLM for the analyst notes (internal only; first run: make llm)
+#   ollama      optional local LLM instead of Claude: --profile ollama, LLM_PROVIDER=openai (make llm)
+#
+# Analyst notes come from Claude if secrets.env (not in Git) holds ANTHROPIC_API_KEY=...;
+# without it the API writes template notes. Production: deploy/compose.prod.yaml.
 #
 # Containers reach each other by service name (http://mlflow:5000, http://api:8000).
 # All ports are bound to 127.0.0.1: nothing is reachable from the network.
@@ -38,20 +41,23 @@ services:
       # Without a champion (fresh clone) the API serves the model baked into the image (fallback).
       MODEL_URI: ${MODEL_URI:-models:/ids-detector@champion}
       MLFLOW_TRACKING_URI: http://mlflow:5000
-      # Analyst notes: any OpenAI-compatible endpoint. Unset LLM_BASE_URL = template notes only.
+      # Analyst notes: Claude (key from secrets.env) or, with LLM_PROVIDER=openai, the local Ollama.
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
-      LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
-      LLM_API_KEY: ${LLM_API_KEY:-ollama}
       LLM_PROMPT_VERSION: ${LLM_PROMPT_VERSION:-v2}
+      LLM_MAX_PER_MINUTE: ${LLM_MAX_PER_MINUTE:-60}
+    env_file:
+      - path: secrets.env
+        required: false  # without it: template notes
     depends_on:
       mlflow:
         condition: service_healthy
-      ollama:
-        condition: service_started  # the API starts anyway; without the LLM it writes template notes
     restart: unless-stopped
 
   ollama:
     image: ollama/ollama:0.40.16
+    profiles: [ollama]  # only with `docker compose --profile ollama ...`
     volumes:
       - ollama-models:/root/.ollama
     environment:

@@ -1,0 +1,18 @@
+# Weekly update PRs for the pinned dependencies. CI (tests, pipeline, pip-audit, image scan) checks
+# every PR; nothing is deployed before it is merged into main.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      python: { patterns: ["*"] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: docker
+    directories: [/docker/api, /docker/mlflow]
+    schedule: { interval: weekly }

@@ -58,7 +58,10 @@ EXAMPLE_FLOW: dict[str, float] = dict.fromkeys(schema.FEATURES, 0.0) | {
 
 Flow = create_model(
     "Flow",
-    __config__=ConfigDict(populate_by_name=True, json_schema_extra={"examples": [EXAMPLE_FLOW]}),
+    # NaN and infinity are rejected: CICFlowMeter writes them for broken flows, the model never saw them.
+    __config__=ConfigDict(
+        populate_by_name=True, allow_inf_nan=False, json_schema_extra={"examples": [EXAMPLE_FLOW]}
+    ),
     __doc__="Behavioural features of one network flow, as computed by CICFlowMeter.",
     **{attribute_name(f): _field(f) for f in schema.FEATURES},
 )
@@ -87,6 +90,7 @@ class BatchResponse(BaseModel):
 class ModelInfo(BaseModel):
     source: str = Field(description="Where the model was loaded from (file path or MLflow model URI)")
     version: str = Field(description="Registry version, or 'file' for the model baked into the image")
+    revision: str = Field(description="Git commit the image was built from ('dev' outside the CD pipeline)")
     fallback: bool = Field(description="True if MODEL_URI could not be loaded and the baked-in model serves")
     threshold: float
     features: int

@@ -15,3 +15,8 @@ notebooks
 reports
 tests
 docs
+
+# Secrets never go into an image
+.env
+secrets.env
+*.pem

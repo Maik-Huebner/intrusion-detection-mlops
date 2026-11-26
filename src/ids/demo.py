@@ -19,10 +19,9 @@ import json
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
-from ids import note, replay, timeline
+from ids import note, replay, timeline, web
 from ids.registry import set_champion
 
 SCENES_FILE = Path("docs/images/live_demo_scenes.json")
@@ -30,10 +29,10 @@ SCENES_FILE = Path("docs/images/live_demo_scenes.json")
 
 def _rollout(version: str) -> None:
     set_champion(version)
-    subprocess.run(["docker", "compose", "--env-file", "local.env", "restart", "api"], check=True)
+    subprocess.run(["docker", "compose", "--env-file", "local.env", "restart", "api"], check=True)  # noqa: S603, S607 - fixed command
     for _ in range(60):  # wait until the API answers again with the new version
         try:
-            with urllib.request.urlopen(f"{replay.API_URL}/model", timeout=2) as response:
+            with web.urlopen(f"{replay.API_URL}/model", timeout=2) as response:
                 if json.load(response)["version"] == version:
                     time.sleep(12)  # let Prometheus scrape the fresh API before the next scene
                     return

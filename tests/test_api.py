@@ -42,7 +42,8 @@ def model_files(prepared_flows, tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_PATH", str(tmp_path / "model.joblib"))
     monkeypatch.setenv("PROFILE_PATH", str(tmp_path / "profile.json"))
     monkeypatch.setenv("FAMILY_PATH", str(tmp_path / "family.joblib"))
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    for var in ("LLM_BASE_URL", "LLM_PROVIDER", "ANTHROPIC_API_KEY", "REVISION"):
+        monkeypatch.delenv(var, raising=False)  # tests never call a real LLM
     monkeypatch.setenv("THRESHOLD", "0.5")
     monkeypatch.delenv("MODEL_URI", raising=False)
     return tmp_path
@@ -252,3 +253,36 @@ def test_explain_survives_an_llm_outage(client, prepared_flows, monkeypatch):
     assert response.status_code == 200
     assert response.json()["reason"] == "TimeoutError"
     assert 'ids_llm_errors_total{kind="TimeoutError"}' in client.get("/metrics").text
+
+
+def test_explain_over_budget_uses_the_template(model_files, prepared_flows, monkeypatch):
+    fake_llm(monkeypatch, answer="DoS Hulk erkannt. Viele Pakete. Webserver prüfen.")
+    monkeypatch.setenv("LLM_MAX_PER_MINUTE", "1")
+    from ids.api.app import app
+
+    with TestClient(app) as c:
+        flow = attack_and_benign(prepared_flows)[0]
+        assert c.post("/explain", json=flow).json()["reason"] != "budget"
+        body = c.post("/explain", json=flow).json()
+        assert body["source"] == "fallback" and body["reason"] == "budget"
+        assert 'ids_llm_requests_total{result="budget"}' in c.get("/metrics").text
+
+
+def test_nan_and_infinity_are_rejected(client, prepared_flows):
+    flow = attack_and_benign(prepared_flows)[0]
+    for bad in ("NaN", "Infinity"):
+        body = (
+            f'{{"Flow Bytes/s": {bad}, '
+            + ", ".join(f'"{k}": {v}' for k, v in flow.items() if k != "Flow Bytes/s")
+            + "}"
+        )
+        response = client.post("/predict", content=body, headers={"Content-Type": "application/json"})
+        assert response.status_code == 422
+
+
+def test_model_info_shows_the_revision(model_files, monkeypatch):
+    monkeypatch.setenv("REVISION", "abc1234")
+    from ids.api.app import app
+
+    with TestClient(app) as c:
+        assert c.get("/model").json()["revision"] == "abc1234"

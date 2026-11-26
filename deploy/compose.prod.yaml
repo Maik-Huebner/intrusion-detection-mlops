@@ -1,0 +1,104 @@
+# Production stack on the server, deployed by the CD pipeline (deploy/ids-deploy, .github/workflows/ci.yml).
+#
+#   nginx (host, TLS)  ->  proxy (Caddy, 127.0.0.1:8320)  ->  api      /, /docs, /predict, /explain ...
+#                                                         ->  grafana  /grafana/ (read-only dashboard)
+#   prometheus scrapes the API on the internal network; it and /metrics are not public.
+#
+# The API image is built by CI from the commit being deployed and contains the model that CI trained
+# and checked with the quality gate - no registry is needed on the server.
+# Every service runs as non-root, read-only, without Linux capabilities and with a memory limit:
+# the server also hosts other sites.
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  api:
+    <<: *hardening
+    image: ghcr.io/maik-huebner/intrusion-detection-mlops:${IMAGE_TAG:?set by ids-deploy}
+    env_file:
+      - ${IDS_SECRETS:?set by ids-deploy}  # ANTHROPIC_API_KEY, only on the server (chmod 600)
+    environment:
+      REVISION: ${IMAGE_TAG}
+      LLM_PROVIDER: anthropic
+      LLM_MODEL: claude-opus-5-5
+      LLM_MAX_PER_MINUTE: "10"   # public endpoint: at most 10 Claude notes per minute,
+      LLM_MAX_PER_DAY: "300"     # 300 per day - beyond that, template notes
+    tmpfs: [/tmp]
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    networks: [internal, egress]  # egress: the API calls the Claude API
+
+  proxy:
+    <<: *hardening
+    image: caddy:2.10.2-alpine
+    user: "65534:65534"  # nobody; port 8080 needs no privileges
+    # The caddy binary carries the file capability cap_net_bind_service: without it in the bounding
+    # set, exec fails. It is not used (unprivileged port, non-root user).
+    cap_add: [NET_BIND_SERVICE]
+    ports:
+      - "127.0.0.1:8320:8080"  # only nginx on the host reaches it
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    tmpfs: [/data, /config]
+    mem_limit: 128m
+    depends_on: [api, grafana]
+    networks: [internal, public]
+
+  prometheus:
+    <<: *hardening
+    image: prom/prometheus:v3.13.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    mem_limit: 384m
+    networks: [internal]
+
+  grafana:
+    <<: *hardening
+    image: grafana/grafana:13.3.1
+    env_file:
+      - ${IDS_GRAFANA_SECRETS:?set by ids-deploy}  # random admin password, generated on the server
+    environment:
+      GF_SERVER_ROOT_URL: https://${IDS_DOMAIN:?set by ids-deploy}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # Public, read-only: anonymous viewers, no login form, no basic auth, no sign-up.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ids-api.json
+    volumes:
+      - ../monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ../monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../monitoring/grafana/ids-api.json:/var/lib/grafana/dashboards/ids-api.json:ro
+      - grafana-data:/var/lib/grafana
+    tmpfs: [/tmp]
+    mem_limit: 384m
+    depends_on: [prometheus]
+    networks: [internal]
+
+networks:
+  internal:
+    internal: true  # no route to the internet
+  egress: {}
+  public: {}
+
+volumes:
+  prometheus-data:
+  grafana-data:

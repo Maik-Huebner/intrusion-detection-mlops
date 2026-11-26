@@ -1,0 +1,37 @@
+# Reverse proxy inside the production stack. TLS ends at nginx on the host; Caddy only routes,
+# limits request sizes and sets security headers.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	request_body {
+		max_size 12MB  # a batch of 10,000 flows is about 10 MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Strict-Transport-Security "max-age=31536000"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-Via
+	}
+
+	# Metrics are for Prometheus on the internal network, not for the internet.
+	handle /metrics* {
+		respond 404
+	}
+
+	handle /grafana* {
+		header X-Frame-Options SAMEORIGIN
+		reverse_proxy grafana:3000
+	}
+
+	handle {
+		header X-Frame-Options DENY
+		reverse_proxy api:8000
+	}
+}

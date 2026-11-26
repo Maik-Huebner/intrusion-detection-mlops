@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Deploys one commit of intrusion-detection-mlops on this server. Installed as ~/bin/ids-deploy and
+# used as the *forced command* of the CD key in ~/.ssh/authorized_keys:
+#
+#   command="/home/maik/bin/ids-deploy",restrict ssh-ed25519 AAAA... ids-deploy
+#
+# The key can therefore run nothing but this script; the only input is the commit to deploy
+# ("deploy <40-character sha>"), which is validated. The image for that commit must exist in GHCR.
+# If the new version does not become healthy, the previous one is started again.
+set -euo pipefail
+
+request="${SSH_ORIGINAL_COMMAND:-$*}"
+if [[ "$request" =~ ^deploy\ ([0-9a-f]{40})$ ]]; then
+  sha="${BASH_REMATCH[1]}"
+elif [[ "$request" == "status" ]]; then
+  cat "$HOME/ids/.deployed" 2>/dev/null || echo "nothing deployed"
+  exit 0
+else
+  echo "usage: deploy <40-character commit sha> | status" >&2
+  exit 2
+fi
+
+repo="https://github.com/Maik-Huebner/intrusion-detection-mlops.git"
+app="$HOME/ids"
+config="$HOME/.config/ids"
+export IDS_SECRETS="$config/secrets.env"
+export IDS_GRAFANA_SECRETS="$config/grafana.env"
+export IDS_DOMAIN="$(cat "$config/domain")"
+
+[[ -f "$IDS_SECRETS" ]] || { echo "missing $IDS_SECRETS (ANTHROPIC_API_KEY=...)" >&2; exit 1; }
+if [[ ! -f "$IDS_GRAFANA_SECRETS" ]]; then  # generated once, never leaves the server
+  (umask 077; echo "GF_SECURITY_ADMIN_PASSWORD=$(openssl rand -hex 24)" > "$IDS_GRAFANA_SECRETS")
+fi
+
+[[ -d "$app/.git" ]] || git clone --quiet "$repo" "$app"
+cd "$app"
+git fetch --quiet origin main
+git merge-base --is-ancestor "$sha" origin/main || { echo "$sha is not on main" >&2; exit 1; }
+previous="$(cat .deployed 2>/dev/null || true)"
+
+up() {
+  git checkout --quiet --detach "$1"
+  IMAGE_TAG="$1" docker compose -p ids -f deploy/compose.prod.yaml pull --quiet
+  IMAGE_TAG="$1" docker compose -p ids -f deploy/compose.prod.yaml up -d --remove-orphans --wait --wait-timeout 120
+}
+
+healthy() {
+  for _ in $(seq 1 30); do
+    if curl -fsS http://127.0.0.1:8320/model 2>/dev/null | grep -q "\"revision\":\"$1\""; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+echo "deploying $sha (previous: ${previous:-none})"
+if up "$sha" && healthy "$sha"; then
+  echo "$sha" > .deployed
+  docker image prune --force --filter "label=org.opencontainers.image.source=https://github.com/Maik-Huebner/intrusion-detection-mlops" >/dev/null
+  echo "deployed $sha"
+  exit 0
+fi
+
+echo "new version is not healthy" >&2
+if [[ -n "$previous" ]]; then
+  echo "rolling back to $previous" >&2
+  up "$previous" && healthy "$previous" && echo "rolled back to $previous" >&2
+fi
+exit 1

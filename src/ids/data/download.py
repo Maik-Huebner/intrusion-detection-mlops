@@ -14,6 +14,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from ids import web
 from ids.config import RAW_ARCHIVE
 
 URL = "https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip"
@@ -32,8 +33,8 @@ def sha256sum(path: Path) -> str:
 def download(url: str, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(target.suffix + ".part")
-    request = urllib.request.Request(url, headers={"User-Agent": "intrusion-detection-mlops"})
-    with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as fh:
+    request = urllib.request.Request(url, headers={"User-Agent": "intrusion-detection-mlops"})  # noqa: S310 - opened with web.urlopen
+    with web.urlopen(request, timeout=60) as response, partial.open("wb") as fh:
         total = int(response.headers.get("Content-Length", 0))
         done, reported = 0, -1
         interactive = sys.stdout.isatty()  # live progress in a terminal, 10 % steps in CI logs

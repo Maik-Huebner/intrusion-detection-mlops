@@ -10,7 +10,7 @@ RETRAIN_DAYS := [monday,tuesday,wednesday,thursday]
 RETRAIN_FUTURE := [friday]
 
 .PHONY: help setup data pipeline test lint format gate check \
-        stack stop llm register retrain rollout rollback replay note demo evaluate-api evaluate-llm
+        stack stop llm server-status register retrain rollout rollback replay note demo evaluate-api evaluate-llm
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -48,8 +48,13 @@ stack: ## Start MLflow, API, Prometheus and Grafana
 stop: ## Stop the stack (data in the volumes is kept)
 	$(COMPOSE) down
 
-llm: ## Download the LLM for the analyst notes into the Ollama volume (once, about 2 GB)
+llm: ## Optional local LLM instead of Claude: start Ollama and download llama3.2:3b (about 2 GB)
+	$(COMPOSE) --profile ollama up -d ollama
 	$(COMPOSE) exec ollama ollama pull llama3.2:3b
+	@echo "use it with: LLM_PROVIDER=openai make stack"
+
+server-status: ## Which commit runs in production (needs the deploy key)
+	@curl -fsS https://ids.178-104-83-110.sslip.io/model; echo
 
 register: ## Log the current pipeline result to MLflow and run champion/challenger
 	$(REGISTRY) python -m ids.registry log

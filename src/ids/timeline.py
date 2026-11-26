@@ -25,6 +25,7 @@ matplotlib.use("agg")
 import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
+from ids import web
 from ids.config import load_params  # noqa: E402
 
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://127.0.0.1:9090")
@@ -33,7 +34,7 @@ BENIGN, ATTACK, DRIFT, MODEL = "#3b9a5b", "#d1495b", "#e08a1e", "#2a7ab8"
 
 def query_range(expr: str, start: float, end: float, step: int = 5) -> list[dict]:
     params = urllib.parse.urlencode({"query": expr, "start": start, "end": end, "step": step})
-    with urllib.request.urlopen(f"{PROMETHEUS_URL}/api/v1/query_range?{params}", timeout=30) as response:
+    with web.urlopen(f"{PROMETHEUS_URL}/api/v1/query_range?{params}", timeout=30) as response:
         return json.load(response)["data"]["result"]
 
 

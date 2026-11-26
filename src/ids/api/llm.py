@@ -6,12 +6,18 @@ traffic and the state of the drift monitor, and writes them up for a SOC analyst
 checked against rules; a note that breaks one, a timeout or an unreachable LLM falls back to a
 template. The API never fails because of the LLM.
 
-Configuration (OpenAI-compatible endpoint, e.g. Ollama in the compose stack):
+Configuration:
 
-* ``LLM_BASE_URL``  e.g. ``http://ollama:11434/v1``; unset = template notes only
-* ``LLM_MODEL``     default ``llama3.2:3b``
-* ``LLM_API_KEY``   Ollama ignores it, the openai package requires one (default ``ollama``)
+* ``LLM_PROVIDER``  ``anthropic`` (Claude), ``openai`` (any OpenAI-compatible endpoint, e.g. a local
+                    Ollama) or ``off``. Default: ``anthropic`` if ``ANTHROPIC_API_KEY`` is set, else
+                    ``openai`` if ``LLM_BASE_URL`` is set, else template notes only.
+* ``ANTHROPIC_API_KEY``  for Claude; never in the repository (``secrets.env``, see the README)
+* ``LLM_MODEL``     default ``claude-opus-5-5`` (Claude) or ``llama3.2:3b`` (Ollama)
+* ``LLM_EFFORT``    Claude's effort level, default ``low``: three sentences need little thinking
+* ``LLM_BASE_URL``  OpenAI-compatible endpoint, e.g. ``http://ollama:11434/v1``
 * ``LLM_TIMEOUT``   seconds, default 60
+* ``LLM_MAX_PER_MINUTE`` / ``LLM_MAX_PER_DAY``  budget for LLM calls (default 20 / 500); above it
+                    the API writes template notes, so a public endpoint cannot run up the bill
 * ``LLM_PROMPT_VERSION`` ``v2`` (default) or ``v1``, to compare prompts in the evaluation
 
 Prompt history (measured with ``ids.evaluate_llm``, rules r2):
@@ -24,7 +30,10 @@ Prompt history (measured with ``ids.evaluate_llm``, rules r2):
 
 import os
 import re
+import threading
 import time
+from collections import deque
+from datetime import date
 
 RULES_VERSION = "r2"
 
@@ -81,18 +90,66 @@ _CVE = re.compile(r"\bCVE-\d{4}-\d+\b", re.IGNORECASE)
 _URL = re.compile(r"https?://|www\.", re.IGNORECASE)
 
 
+DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "llama3.2:3b"}
+# Models with server-side refusal fallbacks: if a safety classifier declines the request (security
+# topics can trigger it), the API answers with the fallback model instead of refusing.
+FALLBACK_MODELS = ("claude-opus-5", "claude-fable-5", "claude-sonnet-5-5")
+
+
 def settings() -> dict:
     """Read on every call, so tests and deployments can change it without a restart of Python."""
+    provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+    if not provider:
+        provider = (
+            "anthropic" if os.getenv("ANTHROPIC_API_KEY") else "openai" if os.getenv("LLM_BASE_URL") else ""
+        )
     return {
+        "provider": "" if provider == "off" else provider,
+        "model": os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider, ""),
+        "effort": os.getenv("LLM_EFFORT", "low"),
         "base_url": os.getenv("LLM_BASE_URL", ""),
-        "model": os.getenv("LLM_MODEL", "llama3.2:3b"),
         "api_key": os.getenv("LLM_API_KEY", "ollama"),
         "timeout": float(os.getenv("LLM_TIMEOUT", "60")),
     }
 
 
 def is_configured() -> bool:
-    return bool(settings()["base_url"])
+    s = settings()
+    if s["provider"] == "anthropic":
+        return bool(os.getenv("ANTHROPIC_API_KEY"))
+    return s["provider"] == "openai" and bool(s["base_url"])
+
+
+class Budget:
+    """Caps LLM calls per minute and per day (thread-safe). Over budget = template note, not an error."""
+
+    def __init__(self, per_minute: int, per_day: int):
+        self.per_minute, self.per_day = per_minute, per_day
+        self._recent: deque[float] = deque()
+        self._day, self._today = date.today(), 0
+        self._lock = threading.Lock()
+
+    @classmethod
+    def from_env(cls) -> "Budget":
+        return cls(int(os.getenv("LLM_MAX_PER_MINUTE", "20")), int(os.getenv("LLM_MAX_PER_DAY", "500")))
+
+    def allow(self, now: float | None = None, today: date | None = None) -> bool:
+        now = time.monotonic() if now is None else now
+        today = today or date.today()
+        with self._lock:
+            if today != self._day:
+                self._day, self._today = today, 0
+            while self._recent and now - self._recent[0] >= 60:
+                self._recent.popleft()
+            if len(self._recent) >= self.per_minute or self._today >= self.per_day:
+                return False
+            self._recent.append(now)
+            self._today += 1
+            return True
+
+
+class NoNoteError(RuntimeError):
+    """The LLM answered, but not with a usable note (refusal, cut off): the caller uses the template."""
 
 
 def _fmt(value: float) -> str:
@@ -167,27 +224,57 @@ def no_alarm_note(probability: float) -> str:
     )
 
 
-def generate(ctx: dict) -> dict:
-    """Ask the LLM. Raises on timeouts and connection errors - the caller falls back."""
-    from openai import OpenAI  # api group; imported here so the rest of the API works without it
+def _claude(s: dict, ctx: dict) -> tuple[str, str, int]:
+    import anthropic  # api group; imported here so the rest of the API works without it
 
-    s = settings()
+    client = anthropic.Anthropic(timeout=s["timeout"], max_retries=1)  # key from ANTHROPIC_API_KEY
+    extra = (
+        {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+        if s["model"].startswith(FALLBACK_MODELS)
+        else {}
+    )
+    answer = client.beta.messages.create(
+        model=s["model"],
+        max_tokens=2048,  # room for (low-effort) thinking plus three sentences
+        system=system_prompt(ctx),
+        messages=[{"role": "user", "content": build_prompt(ctx)}],
+        output_config={"effort": s["effort"]},
+        **extra,
+    )
+    if answer.stop_reason in ("refusal", "max_tokens"):
+        raise NoNoteError(answer.stop_reason)
+    text = "".join(block.text for block in answer.content if block.type == "text")
+    return text, answer.model, answer.usage.input_tokens + answer.usage.output_tokens
+
+
+def _openai_compatible(s: dict, ctx: dict) -> tuple[str, str, int | None]:
+    from openai import OpenAI  # only for a local LLM such as Ollama
+
     client = OpenAI(base_url=s["base_url"], api_key=s["api_key"], timeout=s["timeout"], max_retries=0)
-    start = time.perf_counter()
     answer = client.chat.completions.create(
         model=s["model"],
         messages=[
             {"role": "system", "content": system_prompt(ctx)},
             {"role": "user", "content": build_prompt(ctx)},
         ],
-        temperature=0,  # as reproducible as an LLM gets: same flow, same note
+        temperature=0,  # as reproducible as a local LLM gets: same flow, same note
         max_tokens=220,
     )
-    text = (answer.choices[0].message.content or "").strip()
+    tokens = answer.usage.total_tokens if answer.usage else None
+    return answer.choices[0].message.content or "", s["model"], tokens
+
+
+def generate(ctx: dict) -> dict:
+    """Ask the LLM. Raises on timeouts, connection errors and refusals - the caller falls back."""
+    s = settings()
+    start = time.perf_counter()
+    call = _claude if s["provider"] == "anthropic" else _openai_compatible
+    text, model, tokens = call(s, ctx)
+    text = text.strip()
     return {
         "text": clean(text) if prompt_version() != "v1" else text,
-        "llm_model": s["model"],
+        "llm_model": model,
         "prompt_version": prompt_version(),
-        "tokens": answer.usage.total_tokens if answer.usage else None,
+        "tokens": tokens,
         "seconds": round(time.perf_counter() - start, 2),
     }

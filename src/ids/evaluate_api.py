@@ -21,7 +21,7 @@ import urllib.request
 
 import pandas as pd
 
-from ids import schema
+from ids import schema, web
 from ids.api.schemas import EXAMPLE_FLOW, MAX_BATCH
 from ids.config import PREPARED_DIR, REPORTS_DIR, load_params
 from ids.io import write_json
@@ -33,12 +33,12 @@ EXPERIMENT = "ids-api-evaluation"
 
 def _request(method: str, path: str, body=None) -> tuple[int, dict, float]:
     data = json.dumps(body).encode() if body is not None else None
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - opened with web.urlopen
         f"{API_URL}{path}", data=data, method=method, headers={"Content-Type": "application/json"}
     )
     start = time.perf_counter()
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with web.urlopen(request, timeout=60) as response:
             status, payload = response.status, json.load(response)
     except urllib.error.HTTPError as error:
         status, payload = error.code, {}
