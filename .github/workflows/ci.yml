@@ -21,11 +21,13 @@ permissions:
 
 env:
   DVC_NO_ANALYTICS: "1"
+  UV_HTTP_TIMEOUT: "60"
   MLFLOW_DISABLE_TELEMETRY: "true"
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # a hung download must not block the pipeline for hours
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -42,6 +44,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # a hung download must not block the pipeline for hours
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +63,7 @@ jobs:
   security:
     # Known vulnerabilities in the locked dependencies, insecure code patterns, leaked secrets.
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # a hung download must not block the pipeline for hours
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -140,6 +144,7 @@ jobs:
     needs: [pipeline, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # a hung download must not block the pipeline for hours
     permissions:
       contents: read
       packages: write  # push to ghcr.io with the workflow's own short-lived token
@@ -191,6 +196,7 @@ jobs:
     # Continuous deployment: the server pulls the new image and restarts; unhealthy = automatic rollback.
     needs: [image]
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # a hung download must not block the pipeline for hours
     environment:
       name: production
       url: https://ids.178-104-83-110.sslip.io/docs
