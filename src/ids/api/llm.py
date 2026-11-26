@@ -12,6 +12,7 @@ Configuration:
                     Ollama) or ``off``. Default: ``anthropic`` if ``ANTHROPIC_API_KEY`` is set, else
                     ``openai`` if ``LLM_BASE_URL`` is set, else template notes only.
 * ``ANTHROPIC_API_KEY``  for Claude; never in the repository (``secrets.env``, see the README)
+* ``ANTHROPIC_WORKSPACE_ID``  only for a key that is not scoped to a workspace
 * ``LLM_MODEL``     default ``claude-opus-5-5`` (Claude) or ``llama3.2:3b`` (Ollama)
 * ``LLM_EFFORT``    Claude's effort level, default ``low``: three sentences need little thinking
 * ``LLM_BASE_URL``  OpenAI-compatible endpoint, e.g. ``http://ollama:11434/v1``
@@ -227,7 +228,10 @@ def no_alarm_note(probability: float) -> str:
 def _claude(s: dict, ctx: dict) -> tuple[str, str, int]:
     import anthropic  # api group; imported here so the rest of the API works without it
 
-    client = anthropic.Anthropic(timeout=s["timeout"], max_retries=1)  # key from ANTHROPIC_API_KEY
+    # Key from ANTHROPIC_API_KEY. A key that is not scoped to a workspace needs the workspace ID.
+    workspace = os.getenv("ANTHROPIC_WORKSPACE_ID")
+    headers = {"anthropic-workspace-id": workspace} if workspace else None
+    client = anthropic.Anthropic(timeout=s["timeout"], max_retries=1, default_headers=headers)
     extra = (
         {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
         if s["model"].startswith(FALLBACK_MODELS)

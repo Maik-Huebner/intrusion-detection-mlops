@@ -156,11 +156,12 @@ def _fake_anthropic(monkeypatch, stop_reason="end_turn"):
 
     class FakeClient:
         def __init__(self, **kwargs):
+            calls.append({"client": kwargs})
             self.beta = type("Beta", (), {"messages": _FakeMessages(stop_reason, calls)})()
 
     monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
-    for var in ("LLM_PROVIDER", "LLM_MODEL", "LLM_EFFORT"):
+    for var in ("LLM_PROVIDER", "LLM_MODEL", "LLM_EFFORT", "ANTHROPIC_WORKSPACE_ID"):
         monkeypatch.delenv(var, raising=False)
     return calls
 
@@ -169,7 +170,8 @@ def test_claude_note_is_cleaned_and_counted(monkeypatch):
     calls = _fake_anthropic(monkeypatch)
     answer = llm.generate(CTX)
     assert answer["text"] == GOOD and answer["tokens"] == 820 and answer["llm_model"] == "claude-opus-5-5"
-    request = calls[0]
+    assert calls[0]["client"]["default_headers"] is None
+    request = calls[1]
     assert request["output_config"] == {"effort": "low"} and request["fallbacks"] == "default"
     assert "temperature" not in request  # removed from the current API
     assert "SSH-Patator" in request["messages"][0]["content"]
@@ -183,3 +185,10 @@ def test_claude_refusal_falls_back(monkeypatch):
         assert str(exc) == "refusal"
     else:
         raise AssertionError("a refusal must not become a note")
+
+
+def test_workspace_header_for_keys_without_workspace(monkeypatch):
+    calls = _fake_anthropic(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_test")
+    llm.generate(CTX)
+    assert calls[0]["client"]["default_headers"] == {"anthropic-workspace-id": "wrkspc_test"}
