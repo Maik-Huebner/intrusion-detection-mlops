@@ -26,7 +26,33 @@ Seiten), die **Lieferkette** (Abhängigkeiten, Actions, Images) und die **Verfü
 | 7 | Actions über Tags (`@v7`) können nachträglich auf anderen Code zeigen (Lieferkettenangriff). | mittel | alle Actions auf Commit-SHAs fixiert; Dependabot hält sie aktuell |
 | 8 | Bekannte Schwachstellen in Abhängigkeiten | mittel | `pip-audit` über alle Pakete aus `uv.lock` in CI; Trivy-Scan des Images blockiert das Deployment bei behebbaren kritischen Befunden |
 | 9 | Container mit vollen Rechten könnten bei einer Lücke den Server gefährden. | mittel | alle Produktions-Container: Nicht-Root, schreibgeschütztes Dateisystem, keine Linux-Capabilities, `no-new-privileges`, Speicher-, CPU- und Prozesslimits; Prometheus und Grafana in einem Netz **ohne Internetzugang** |
-| 10 | Prompt-Injection über die Notiz | niedrig | Der Prompt enthält nur Zahlen und Ergebnisse der eigenen Modelle, keinen Text aus der Anfrage. Die Ausgabe prüfen sechs Regeln (u. a. keine erfundenen IPs, CVEs oder URLs); Fehler werden ohne Inhalt geloggt |
+| 10 | Prompt-Injection und unsichere LLM-Ausgabe | hoch, ohne Gegenmaßnahmen | siehe nächster Abschnitt |
+
+## KI-Sicherheit (OWASP Top 10 für LLM-Anwendungen 2025)
+
+Die LLM-Notiz ist der einzige Teil, in dem ein Sprachmodell Text erzeugt. Jeder Punkt der
+[OWASP Top 10 für LLM-Anwendungen](https://genai.owasp.org/llm-top-10/) wurde geprüft; „Test“ nennt den
+automatischen Nachweis in `tests/`.
+
+| OWASP | Risiko hier | Schutz | Test |
+|---|---|---|---|
+| **LLM01 Prompt Injection** | Ein Angreifer schickt Anweisungen statt Messwerten. | **Durch den Aufbau ausgeschlossen:** Die API nimmt nur 83 Zahlen an (`strict`, `extra="forbid"`, keine `NaN`). Der Prompt enthält nur Ergebnisse der eigenen Modelle; Typ, Familie, Merkmalsnamen und Zahlen werden vor jedem Aufruf gegen Allowlists geprüft (`validate_context`), sonst kein LLM-Aufruf. Kein RAG, keine Webseiten, keine Dateien – keine indirekte Injection. Der Systemprompt sagt zusätzlich: Eingaben sind Daten, nie Anweisungen. | `test_prompt_injection_through_the_request_is_impossible`, `test_prompt_context_must_come_from_the_models` |
+| **LLM02 Offenlegung sensibler Daten** | Key oder interne Daten in Prompt oder Antwort | Im Prompt stehen keine Geheimnisse und keine personenbezogenen Daten (der Datensatz enthält keine; IPs werden schon in der Pipeline entfernt). Der Key liegt nur in `secrets.env`; Fehler werden ohne Inhalt geloggt. | `test_claude_note_is_cleaned_and_counted` |
+| **LLM03 Lieferkette** | manipuliertes SDK oder Modell | Anthropic-SDK fest versioniert in `uv.lock`, pip-audit, Dependabot; Modell-ID fest im Code | CI-Job `security` |
+| **LLM04 Daten- und Modellvergiftung** | manipulierte Trainingsdaten | Das LLM wird nicht trainiert. Die eigenen Modelle lernen nur aus Rohdaten mit SHA-256-Prüfung und Validierungsstufe. | `tests/test_validate.py`, CI-Pipeline |
+| **LLM05 Unsichere Verarbeitung der Ausgabe** | HTML/JavaScript oder Links in der Notiz landen in einer Oberfläche | Ausgabe gilt als nicht vertrauenswürdig: Steuer- und unsichtbare Unicode-Zeichen (z. B. Richtungswechsel) werden entfernt, die Regel `no_markup` verwirft HTML, Markdown, Links und `javascript:`; `no_invented_identifiers` verwirft IPs, CVEs und URLs. Die Startseite setzt Text nur per `textContent` und sendet eine strenge Content-Security-Policy. | `test_markup_and_links_in_notes_are_rejected`, `test_invisible_and_control_characters_are_removed`, `test_start_page_has_examples_and_no_external_resources` |
+| **LLM06 Übermäßige Handlungsfreiheit** | LLM löst Aktionen aus | Das LLM hat **keine Werkzeuge** und keine Rechte. Ob ein Flow ein Angriff ist, entscheiden die beiden geprüften Modelle; das LLM formuliert nur. | Aufbau (kein `tools`-Parameter) |
+| **LLM07 Preisgabe des Systemprompts** | Angreifer liest den Prompt aus | Der Prompt enthält nichts Geheimes und ist ohnehin öffentlich im Repository; ohne Text-Eingabe gibt es keinen Weg, ihn abzufragen. | – |
+| **LLM08 Schwächen bei Vektoren/Embeddings** | – | nicht zutreffend: kein RAG, keine Vektordatenbank | – |
+| **LLM09 Falschinformation** | erfundene Fakten, falscher Angriffstyp | Sieben Regeln je Notiz (Typ nennen, keine andere Familie, keine erfundenen Kennungen, Drift genau dann, wenn gewarnt …), sonst Vorlage. Der Drift-Monitor warnt in der Notiz, wenn der Typ falsch sein kann. Gemessen in MLflow: 26 von 26 Notizen bestehen (Claude, Prompt v3, Regeln r3). | `tests/test_llm.py`, `ids.evaluate_llm` |
+| **LLM10 Unbegrenzter Verbrauch** | Kosten- oder Last-Angriff über `/explain` | Budget 10 Notizen/Minute und 300/Tag, `max_tokens` 2048, Timeout 60 s, nginx-Ratenlimit 20/s je IP, 12 MB je Anfrage, Ausgabenlimit in der Anthropic Console | `test_explain_over_budget_uses_the_template`, `test_budget_per_minute_and_per_day` |
+
+Dazu: Lehnt Claude eine Anfrage ab (`stop_reason: refusal`) oder schneidet sie ab, kommt die Vorlage;
+bei Opus 5.5 antwortet serverseitig zuerst ein Fallback-Modell (`fallbacks: "default"`).
+
+**Grenze:** Absolute Sicherheit gibt es nicht. Die Angriffsfläche für Prompt-Injection ist hier aber
+nicht nur „gefiltert“, sondern fehlt: Es gibt keinen Weg, auf dem Text eines Nutzers in den Prompt kommt.
+Wer die API um Freitext erweitert (z. B. Analysten-Kommentare), muss diesen Abschnitt neu bewerten.
 
 ## Was automatisch geprüft wird
 

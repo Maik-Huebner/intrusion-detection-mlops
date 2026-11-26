@@ -9,7 +9,7 @@ neues Modell über die Registry ausgerollt wird.
 ```bash
 cd intrusion-detection-mlops
 open -a Docker                       # Docker Desktop starten, falls es nicht läuft
-make stack                           # MLflow, API, Prometheus, Grafana, Ollama
+make stack                           # MLflow, API, Prometheus, Grafana (Claude-Key aus secrets.env)
 curl -s localhost:8000/model         # antwortet die API? Welche Version?
 ```
 
@@ -37,6 +37,15 @@ make rollback V=5
 make note DAY=tuesday LABEL=SSH-Patator
 ```
 
+**Variante Server** (wenn der Laptop-Stack nicht laufen soll): Alles Folgende geht auch gegen den
+Server, ohne Registry-Schritte – dort läuft das Modell aus `main` (Montag bis Mittwoch):
+
+```bash
+export API_URL=https://ids.178-104-83-110.sslip.io
+make replay DAY=thursday             # Dashboard: https://ids.178-104-83-110.sslip.io/grafana/
+make note DAY=friday LABEL=DDoS
+```
+
 ## Ablauf
 
 | Zeit | Befehl | Was man zeigt und sagt |
@@ -47,15 +56,17 @@ make note DAY=tuesday LABEL=SSH-Patator
 | 1:25 | `make note DAY=friday LABEL=DDoS` | Terminal: wahres Label DDoS, Typ-Modell sagt **DoS Hulk, 99,9 % sicher** – falsch. Die Notiz endet mit „**Achtung, Drift:** Die Zuordnung kann falsch sein“. „Das LLM entscheidet nichts, es formuliert – und es weiß vom Drift-Monitor.“ |
 | 1:55 | `make rollback V=6` | Tab 3: `@champion` zeigt auf v6. „Das Modell mit Donnerstag ist schon trainiert und hat den Champion/Challenger-Vergleich gewonnen – Rollout ist nur ein Neustart der API.“ Grafana: Version springt auf **v6**. |
 | 2:20 | `make replay DAY=friday` | Terminal: **99 % erkannt**, Freitag hat keines der Modelle je gesehen. Grafana: Drift wieder OK. |
-| 2:50 | – | „Daten, Pipeline, Registry, Monitoring, Notiz, Rollout – der Kreislauf ist geschlossen.“ |
+| 2:50 | Browser: `https://ids.178-104-83-110.sslip.io/model` | „Und das alles läuft auch öffentlich: Jeder Push auf main wird getestet, neu trainiert, gescannt und automatisch ausgerollt – hier steht der Commit, der gerade läuft.“ |
+| 3:05 | – | „Daten, Pipeline, Registry, Monitoring, Notiz, Rollout, Deployment – der Kreislauf ist geschlossen.“ |
 
 Hinweise:
 
 - In der Demo heißt das Ausrollen von v6 `make rollback V=6`, weil v6 schon registriert ist. Der echte Weg
   nach einem Alarm ist `make retrain` (DVC-Experiment, Registrierung, Champion/Challenger) und danach
   `make rollout`. Das dauert rund zwei Minuten und lohnt sich live nur, wenn Zeit ist.
-- Braucht das LLM zu lange (über 60 s) oder ist es nicht da, kommt die Notiz aus der Vorlage
-  (`note from fallback`). Auch das ist eine gute Antwort auf die Frage „Was, wenn das LLM ausfällt?“.
+- Braucht das LLM zu lange (über 60 s), fehlt der Key oder ist das Budget erreicht, kommt die Notiz aus
+  der Vorlage (`note from fallback`). Auch das ist eine gute Antwort auf die Frage „Was, wenn das LLM
+  ausfällt?“.
 - Alles in einem Durchlauf (ohne Pausen zum Erklären): `make demo BEFORE=5 AFTER=6`.
 
 ## Plan B
@@ -72,8 +83,9 @@ Wenn Docker, das Netz oder der Laptop streiken, zeigen die Folien die Bilder aus
 | Symptom | Ursache und Lösung |
 |---|---|
 | `/model` zeigt `"fallback": true` | Die API hat die Registry beim Start nicht erreicht. `docker compose --env-file local.env ps` prüfen, dann `make rollout`. |
-| Notiz kommt immer aus der Vorlage (`not_configured` oder `APIConnectionError`) | Ollama läuft nicht oder das Modell fehlt: `make llm`, dann erneut versuchen. |
-| Notiz dauert sehr lange | Speicher knapp: In Docker Desktop mehr RAM geben (mindestens 8 GB) oder Grafana kurz stoppen. |
+| Notiz kommt immer aus der Vorlage (`not_configured`) | `secrets.env` fehlt oder enthält keinen `ANTHROPIC_API_KEY`; danach `docker compose --env-file local.env up -d api`. |
+| Notiz aus der Vorlage mit `AuthenticationError` / `APIConnectionError` | Key ungültig bzw. kein Internet. Offline-Alternative: `LLM_PROVIDER=openai make stack` und `make llm` (Ollama). |
+| Notiz aus der Vorlage mit `budget` | Budget je Minute erreicht: kurz warten. |
 | Grafana zeigt „No data“ | Zeitraum auf „Last 5 minutes“ stellen; Prometheus → Status → Target health muss `ids-api` als UP zeigen. |
 | Drift bleibt nach dem Donnerstag bei OK | Das Fenster braucht mindestens 500 durchgelassene Flows: Replay noch einmal starten. |
 | Port 3000 belegt | `GRAFANA_PORT` in `local.env` anpassen (Standard hier: 3001). |

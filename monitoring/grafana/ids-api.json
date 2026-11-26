@@ -110,7 +110,7 @@
             "uid": "prometheus"
           },
           "expr": "ids_model_info",
-          "legendFormat": "v{{version}}",
+          "legendFormat": "{{display}}",
           "instant": true,
           "range": false
         }
@@ -600,6 +600,7 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
+          "max": 1,
           "color": {
             "mode": "fixed",
             "fixedColor": "purple"

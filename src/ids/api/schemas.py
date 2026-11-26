@@ -60,7 +60,12 @@ Flow = create_model(
     "Flow",
     # NaN and infinity are rejected: CICFlowMeter writes them for broken flows, the model never saw them.
     __config__=ConfigDict(
-        populate_by_name=True, allow_inf_nan=False, json_schema_extra={"examples": [EXAMPLE_FLOW]}
+        populate_by_name=True,
+        allow_inf_nan=False,
+        # Only numbers, only known fields: no text from a request can ever reach the LLM prompt.
+        strict=True,
+        extra="forbid",
+        json_schema_extra={"examples": [EXAMPLE_FLOW]},
     ),
     __doc__="Behavioural features of one network flow, as computed by CICFlowMeter.",
     **{attribute_name(f): _field(f) for f in schema.FEATURES},
@@ -79,6 +84,8 @@ class Prediction(BaseModel):
 
 
 class BatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     flows: list[Flow] = Field(min_length=1, max_length=MAX_BATCH)  # type: ignore[valid-type]
 
 

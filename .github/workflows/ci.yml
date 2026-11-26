@@ -219,6 +219,7 @@ jobs:
       - name: Smoke test over the internet
         run: |
           curl -fsS "$URL/health"
+          curl -fsS "$URL/" | grep -q "Intrusion Detection"  # start page
           curl -fsS "$URL/model" | tee /dev/stderr | grep -q "\"revision\":\"$GITHUB_SHA\""
           python3 -c "import json; from urllib.request import urlopen; print(json.load(urlopen('$URL/openapi.json'))['info']['version'])"
           test "$(curl -s -o /dev/null -w '%{http_code}' "$URL/metrics")" = 404  # metrics stay internal

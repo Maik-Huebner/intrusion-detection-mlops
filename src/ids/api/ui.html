@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intrusion Detection live</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --ink: #1b1f24; --muted: #5d6b7e; --line: #dde3ea;
+    --navy: #14213d; --red: #c8394b; --green: #2f8a4f; --amber: #c87a12; --blue: #2a7ab8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f141c; --card: #171e29; --ink: #e8edf3; --muted: #93a1b3; --line: #273142;
+            --navy: #c9d6ea; --red: #f06b7c; --green: #5cc283; --amber: #f0a948; --blue: #6cb0e6; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font: 700 2rem/1.2 Georgia, serif; color: var(--navy); margin: 0 0 6px; }
+  h2 { font: 700 1.25rem/1.3 Georgia, serif; color: var(--navy); margin: 32px 0 12px; }
+  p.lead { color: var(--muted); margin: 0 0 20px; max-width: 760px; }
+  .links { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+  .links a { text-decoration: none; color: var(--card); background: var(--blue); padding: 8px 14px;
+             border-radius: 8px; font-weight: 600; font-size: .95rem; }
+  .links a.secondary { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .k { color: var(--muted); font-size: .85rem; }
+  .v { font-size: 1.35rem; font-weight: 700; margin-top: 2px; overflow-wrap: anywhere; }
+  .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--amber); }
+  .buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  button { text-align: left; font: inherit; color: var(--ink); background: var(--card); cursor: pointer;
+           border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  button:hover, button:focus-visible { border-color: var(--blue); outline: none; }
+  button[disabled] { opacity: .6; cursor: wait; }
+  button b { display: block; color: var(--navy); }
+  button span { color: var(--muted); font-size: .9rem; }
+  #result { margin-top: 16px; }
+  .verdict { font-size: 1.2rem; font-weight: 700; }
+  .note { border-left: 4px solid var(--blue); padding: 8px 0 8px 14px; margin: 14px 0; font-style: italic; }
+  .badge { display: inline-block; font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+           border: 1px solid currentColor; margin-left: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+  footer { margin-top: 36px; color: var(--muted); font-size: .85rem; }
+  footer a { color: var(--blue); }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: .9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Intrusion Detection – live</h1>
+  <p class="lead">Ein Modell bewertet Netzwerk-Flows als harmlos oder Angriff, ein zweites nennt den Angriffstyp,
+    Claude schreibt eine Notiz für den Analysten – und ein Drift-Monitor merkt ohne Labels, wenn neue
+    Angriffsarten auftauchen. Jeder Push auf <code>main</code> wird getestet, neu trainiert, gescannt und
+    automatisch hier ausgerollt.</p>
+  <div class="links">
+    <a href="docs">API ausprobieren (/docs)</a>
+    <a href="grafana/">Live-Dashboard</a>
+    <a class="secondary" href="https://github.com/Maik-Huebner/intrusion-detection-mlops">Code auf GitHub</a>
+  </div>
+
+  <h2>Zustand im Betrieb</h2>
+  <div class="grid">
+    <div class="card"><div class="k">Modell</div><div class="v" id="s-model">…</div><div class="k" id="s-model-sub"></div></div>
+    <div class="card"><div class="k">Drift-Monitor</div><div class="v" id="s-drift">…</div><div class="k" id="s-drift-sub"></div></div>
+    <div class="card"><div class="k">Alarmschwelle</div><div class="v" id="s-threshold">…</div><div class="k">Wahrscheinlichkeit für „Angriff“</div></div>
+    <div class="card"><div class="k">API</div><div class="v" id="s-health">…</div><div class="k">Version <span id="s-version"></span></div></div>
+  </div>
+
+  <h2>Ausprobieren: drei echte Flows</h2>
+  <div class="buttons" id="examples"></div>
+  <div id="result" class="card" hidden></div>
+
+  <footer>
+    Daten: CIC-IDS2017 (korrigierte Fassung, Liu, Engelen et al. 2022). Trainiert auf Montag bis Mittwoch –
+    Angriffe von Donnerstag und Freitag kennt das Modell nicht. Notizen: höchstens 10 pro Minute, danach
+    aus einer Vorlage. <a href="model">/model</a> · <a href="drift">/drift</a> · <a href="health">/health</a>
+  </footer>
+</main>
+<script>
+const EXAMPLES = __EXAMPLES__;
+const $ = (id) => document.getElementById(id);
+const pct = (x) => (100 * x).toLocaleString("de-DE", { maximumFractionDigits: 1 }) + " %";
+const num = (x) => Number(x).toLocaleString("de-DE", { maximumFractionDigits: 2 });
+function el(tag, text, cls) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; }
+
+async function status() {
+  try {
+    const [model, health, openapi] = await Promise.all([
+      fetch("model").then((r) => r.json()), fetch("health").then((r) => r.json()), fetch("openapi.json").then((r) => r.json()),
+    ]);
+    $("s-model").textContent = model.version === "file" ? "aus CI" : "v" + model.version;
+    $("s-model-sub").textContent = "Commit " + model.revision.slice(0, 7) + (model.fallback ? " · Rückfall!" : "");
+    $("s-threshold").textContent = num(model.threshold);
+    $("s-health").textContent = health.status === "ok" ? "läuft" : health.status;
+    $("s-health").className = "v " + (health.status === "ok" ? "ok" : "bad");
+    $("s-version").textContent = openapi.info.version;
+  } catch (e) { $("s-health").textContent = "nicht erreichbar"; $("s-health").className = "v bad"; }
+  try {
+    const d = await fetch("drift").then((r) => r.json());
+    if (d.drift === null || d.drift === undefined) {
+      $("s-drift").textContent = "sammelt"; $("s-drift").className = "v";
+      $("s-drift-sub").textContent = d.window_flows + " Flows im Fenster (ab 500 bewertet)";
+    } else {
+      $("s-drift").textContent = d.drift ? "DRIFT " + pct(d.drift_share) : "OK " + pct(d.drift_share);
+      $("s-drift").className = "v " + (d.drift ? "bad" : "ok");
+      $("s-drift-sub").textContent = "Anteil verschobener Merkmale, Fenster " + d.window_flows + " Flows";
+    }
+  } catch (e) { $("s-drift").textContent = "–"; }
+}
+
+function show(example, answer) {
+  const box = $("result"); box.replaceChildren(); box.hidden = false;
+  const p = answer.prediction;
+  box.append(el("div", example.title + ": " + example.label, "k"));
+  const v = el("div", "", "verdict " + (p.is_attack ? "bad" : "ok"));
+  v.textContent = p.is_attack
+    ? "Alarm: " + p.attack_type + " (" + p.family + ") · Angriff " + pct(p.attack_probability) + ", Typ " + pct(p.type_confidence) + " sicher"
+    : "Kein Alarm · Angriffswahrscheinlichkeit " + pct(p.attack_probability);
+  box.append(v);
+  if (example.label.startsWith("DDoS") && p.is_attack) {
+    box.append(el("div", "Das wahre Label ist DDoS – das Typ-Modell kennt DDoS nicht und ordnet den Flow selbstsicher einer bekannten Art zu.", "k warn"));
+  }
+  const note = el("div", answer.note, "note");
+  box.append(note);
+  const src = el("div", "", "k");
+  src.textContent = "Notiz: " + (answer.source === "llm" ? (answer.llm_model + ", " + answer.seconds + " s, alle Regeln bestanden")
+    : answer.source === "fallback" ? "Vorlage (" + answer.reason + ")" : "kein Alarm, kein LLM nötig");
+  if (answer.drift_warning) src.append(el("span", "Drift-Warnung aktiv", "badge warn"));
+  box.append(src);
+  if (answer.unusual_features.length) {
+    box.append(el("h2", "Auffälligste Merkmale"));
+    const wrap = el("div", undefined, "scroll"); const t = el("table");
+    const head = el("tr"); ["Merkmal", "Wert", "normal von", "bis"].forEach((h) => head.append(el("th", h))); t.append(head);
+    answer.unusual_features.forEach((f) => {
+      const r = el("tr"); r.append(el("td", f.feature));
+      [f.value, f.normal_low, f.normal_high].forEach((x) => r.append(el("td", num(x), "num"))); t.append(r);
+    });
+    wrap.append(t); box.append(wrap);
+  }
+}
+
+async function run(key, button) {
+  document.querySelectorAll("#examples button").forEach((b) => (b.disabled = true));
+  const old = button.querySelector("span").textContent; button.querySelector("span").textContent = "Modelle und Claude arbeiten …";
+  try {
+    const r = await fetch("explain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(EXAMPLES[key].flow) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    show(EXAMPLES[key], await r.json());
+  } catch (e) {
+    const box = $("result"); box.hidden = false; box.replaceChildren(el("div", "Fehler: " + e.message + " (bei HTTP 429 kurz warten)", "bad"));
+  } finally {
+    button.querySelector("span").textContent = old;
+    document.querySelectorAll("#examples button").forEach((b) => (b.disabled = false));
+    status();
+  }
+}
+
+for (const [key, ex] of Object.entries(EXAMPLES)) {
+  const b = el("button"); b.append(el("b", ex.title)); b.append(el("span", ex.label));
+  b.addEventListener("click", () => run(key, b)); $("examples").append(b);
+}
+status(); setInterval(status, 10000);
+</script>
+</body>
+</html>

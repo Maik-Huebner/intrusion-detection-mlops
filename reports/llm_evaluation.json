@@ -1,51 +1,46 @@
 {
-  "duration_s": 178,
+  "duration_s": 65,
   "examples": [
     {
-      "note": "Ein DoS-Angriff mit der Familie DoS, bekannt als DoS Hulk, wurde erkannt, wobei sich die Packet-Länge-Variante stark von dem normalen Verkehr unterscheidet. Die beiden auffälligsten Merkmale sind die Packet-Länge-Variante mit 5.036.056 und die Bwd Packet Length Max mit 7.240, die deutlich außerhalb des normalen Bereichs liegen. Der Analyst sollte die Netzwerkverbindung auf weitere Angriffssignale überprüfen, um die Auswirkungen des Angriffs zu bestimmen.",
+      "note": "Beide Modelle stufen den Flow auf Zielport 80 (Protokoll 6) mit 100 % Sicherheit als Angriff vom Typ DoS Hulk ein. Am auffälligsten sind Packet Length Variance mit 5.036.056 (normal 85,3 bis 352.802) und Bwd Packet Length Std mit 3.127 (normal 0 bis 691). Der Analyst sollte prüfen, ob die Quelle viele gleichartige HTTP-Anfragen an den Webserver sendet, und dessen Auslastung kontrollieren.",
       "source": "llm",
       "type": "DoS Hulk"
     },
     {
-      "note": "Ein DoS-Angriff mit der Familie DoS, bekannt als DoS Hulk, wurde erkannt, wobei die Durchsatzrate im Backwarden (Bwd) bei 46.566.264 Bites pro Sekunde deutlich über dem normalen Bereich liegt. Die Packet-Größen-Variante und der Durchsatz von Bytes pro Bulk-Avg sind ebenfalls auffällig. Der Analyst sollte die Angriffsquellen und die Netzwerkkomponenten überprüfen, um die Auswirkungen des Angriffs besser zu verstehen.",
+      "note": "Beide Modelle stufen den Flow auf Zielport 80 (Protokoll 6) mit 100 % Sicherheit als Angriff vom Typ DoS Hulk ein. Am auffälligsten sind Bwd Bulk Rate Avg mit 46.566.264 (normal 0 bis 54.202) und Bwd Bytes/Bulk Avg mit 11.595 (normal 0 bis 957). Prüfen Sie Anfragevolumen und Antwortzeiten des betroffenen Webservers sowie weitere Flows derselben Quelle.",
       "source": "llm",
       "type": "DoS Hulk"
     },
     {
-      "note": "Ein DoS-Angriff mit 100% Wahrscheinlichkeit wurde erkannt, der DoS Hulk (Familie DoS) greift den Zielport 80 über Protokoll 6 an. Die auffälligsten Merkmale sind eine übermäßige Bulk-Rate (24.106.028) und eine ungewöhnliche Packet-Length-Variante (2.210.208), was auf eine intensivere Angriffsstrategie hinweist. Der Analyst sollte die Details des Angriffs überprüfen, um sicherzustellen, dass keine anderen Angriffsmethoden oder Sicherheitslücken übersehen werden.",
+      "note": "Beide Modelle stufen den Flow auf Zielport 80 (Protokoll 6) mit 100 % Sicherheit als Angriff vom Typ DoS Hulk ein. Am auffälligsten sind Bwd Bulk Rate Avg mit 24.106.028 (normal 0 bis 54.202) und Bwd Bytes/Bulk Avg mit 11.595 (normal 0 bis 957). Prüfen Sie die Quelle auf viele gleichartige HTTP-Anfragen sowie die Auslastung des betroffenen Webservers.",
       "source": "llm",
       "type": "DoS Hulk"
     },
     {
-      "note": "Alarm: DoS Hulk (Familie DoS), Wahrscheinlichkeit 100%, Zielport 80. Auffällig: Packet Length Variance, Bwd Packet Length Std, Bwd Packet Length Max. Nächster Schritt: Quelle und weitere Verbindungen im selben Zeitraum prüfen.",
-      "source": "fallback",
+      "note": "Beide Modelle stufen den Flow auf Zielport 80 (Protokoll 6) mit 100 % Wahrscheinlichkeit als DoS Hulk (Familie DoS) ein. Am auffälligsten sind Packet Length Variance mit 6.555.894 (normal 85,3 bis 352.802) und Bwd Packet Length Std mit 3.774 (normal 0 bis 691). Der Analyst sollte prüfen, ob zeitgleich viele ähnliche HTTP-Flows dieselbe Quelle oder denselben Webserver betreffen.",
+      "source": "llm",
       "type": "DoS Hulk"
     },
     {
-      "note": "Ein DoS GoldenEye-Angriff mit hoher Wahrscheinlichkeit wurde erkannt, der sich durch einen hohen Bulk-Rate und ho Aktivität auszeichnet. Der Bwd Bulk Rate Avg liegt bei 39.297.296, während der normalen normale Bereich liegt. Der Analyst sollte die Details des Angriffs überprüfen, um sicherzustellen, dass es sich tatsächlich um einen DoS GoldenEye-Angriff handelt und keine andere Art von Angriff ist.",
+      "note": "Der Detektor stuft den Flow auf Port 80 (Protokoll 6) mit 100 % als Angriff ein, Typ DoS GoldenEye. Am auffälligsten sind Bwd Bulk Rate Avg mit 39.297.296 (normal 0 bis 54.202) und Active Min mit 5.043.266 (normal 0 bis 87.755). Prüfen Sie, ob vom selben Quellsystem viele lang offene HTTP-Verbindungen ausgehen und der Webserver ausgelastet ist.",
       "source": "llm",
       "type": "DoS GoldenEye"
     },
     {
-      "note": "Angriff mit hoher Wahrscheinlichkeit bestätigt, es handelt sich um einen DoS GoldenEye-Angriff. Die beiden auffälligsten Merkmale sind der Idle-Standard von 54.593.404 und der Flow-IAT-Max von 100.497.280, die deutlich über dem normalen Bereich liegen. Als Nächstes sollte der Analyst die Netzwerkverbindung überprüfen, um sicherzustellen, dass keine anderen Angriffe oder Sicherheitslücken entdeckt werden können.",
+      "note": "Beide Modelle erkennen mit 100 % Sicherheit einen Angriff vom Typ DoS GoldenEye auf Zielport 80 (Protokoll 6). Am auffälligsten sind Idle Std mit 54.593.404 (normal 0 bis 51.815) und Bwd IAT Std mit 48.370.792 (normal 0 bis 4.768.888). Der Analyst sollte prüfen, ob weitere Flows derselben Quelle lange offen gehaltene HTTP-Verbindungen zeigen, und die Webserver-Auslastung kontrollieren.",
       "source": "llm",
       "type": "DoS GoldenEye"
     }
   ],
   "explained": 26,
-  "failed_rules": {
-    "names_attack_type": 1
-  },
-  "fallback_reasons": {
-    "APITimeoutError": 1,
-    "rules": 1
-  },
+  "failed_rules": {},
+  "fallback_reasons": {},
   "flows": 26,
-  "latency_p50_s": 4.38,
-  "latency_p95_s": 8.61,
-  "llm_model": "llama3.2:3b",
-  "prompt_version": "v2",
-  "rule_pass_rate": 0.9231,
-  "rules_version": "r2",
+  "latency_p50_s": 2.35,
+  "latency_p95_s": 3.74,
+  "llm_model": "claude-opus-5-5",
+  "prompt_version": "v3",
+  "rule_pass_rate": 1.0,
+  "rules_version": "r3",
   "type_correct_rate": 1.0
 }

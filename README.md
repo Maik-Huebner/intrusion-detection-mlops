@@ -1,6 +1,7 @@
 # Intrusion Detection MLOps
 
-[![CI](https://github.com/Maik-Huebner/intrusion-detection-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/Maik-Huebner/intrusion-detection-mlops/actions/workflows/ci.yml)
+[![CI/CD](https://github.com/Maik-Huebner/intrusion-detection-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/Maik-Huebner/intrusion-detection-mlops/actions/workflows/ci.yml)
+[![Live](https://img.shields.io/badge/live-API%20%2B%20Dashboard-2ea44f)](https://ids.178-104-83-110.sslip.io/docs)
 ![Python](https://img.shields.io/badge/python-3.12%20|%203.13%20|%203.14-blue)
 ![DVC](https://img.shields.io/badge/data-DVC-945dd6)
 ![MLflow](https://img.shields.io/badge/registry-MLflow-0194e2)
@@ -14,10 +15,13 @@
 > A label-free drift monitor on the traffic the model lets through fires anyway. Retraining with
 > Thursday as a DVC experiment, champion/challenger promotion in the MLflow registry and a rollout
 > without rebuilding the image bring Friday's never-seen attacks from **37 %** to **99 %**. A second model
-> names the attack type, and a local LLM (Ollama) writes a rule-checked note for the analyst – including
-> a warning when the drift monitor says the type may be wrong.
-> Everything runs locally with one `docker compose` stack (MLflow, FastAPI, Prometheus, Grafana) and is
-> rebuilt from the raw data and checked for byte-identical results by CI on every push.
+> names the attack type, and Claude writes a rule-checked note for the analyst – including a warning when
+> the drift monitor says the type may be wrong.
+> Locally everything runs in one `docker compose` stack (MLflow, FastAPI, Prometheus, Grafana). Every push
+> to `main` is linted, tested, security-scanned, rebuilt from the raw data (byte-identical results),
+> quality-gated, packed into an image and **deployed automatically** to a public server – with automatic
+> rollback if the new version is unhealthy: **[live API](https://ids.178-104-83-110.sslip.io/docs)** ·
+> **[live dashboard](https://ids.178-104-83-110.sslip.io/grafana/)**.
 
 Ein Machine-Learning-Modell erkennt im Netzwerkverkehr, ob eine Verbindung normal ist oder zu einem
 Angriff gehört (DoS, Brute Force, PortScan, Botnet, Web-Angriffe …). Im Mittelpunkt steht aber nicht
@@ -25,9 +29,14 @@ das Modell, sondern der **Kreislauf drumherum**: Daten versionieren und prüfen,
 trainieren, nur geprüfte Modelle ausrollen, im Betrieb merken, dass das Modell veraltet, neu trainieren
 und das neue Modell kontrolliert ausrollen.
 
+**Live:** [Startseite zum Ausprobieren](https://ids.178-104-83-110.sslip.io/) ·
+[API mit interaktiver Doku](https://ids.178-104-83-110.sslip.io/docs) ·
+[Grafana-Dashboard](https://ids.178-104-83-110.sslip.io/grafana/) · [welcher Commit läuft?](https://ids.178-104-83-110.sslip.io/model)
+
 **Inhalt:** [Die Geschichte in drei Bildern](#die-geschichte-in-drei-bildern) ·
 [Der MLOps-Kreislauf](#der-mlops-kreislauf) · [Monitoring ohne Labels](#monitoring-ohne-labels) ·
 [Angriffstyp und LLM-Notiz](#welcher-angriff-angriffstyp-und-llm-notiz) ·
+[CI/CD](#cicd-vom-push-in-den-betrieb) · [Sicherheit](#sicherheit) ·
 [Architektur](#architektur) · [Datensatz](#der-datensatz-und-warum-die-korrigierte-fassung) ·
 [Schnellstart](#schnellstart) · [Live-Demo](#live-demo-in-drei-befehlen) ·
 [Erkenntnisse](#erkenntnisse-aus-dem-projekt) · [Grenzen](#grenzen-und-nächste-schritte)
@@ -208,8 +217,9 @@ kennt – und ordnet neue Angriffe **selbstsicher einer bekannten Familie** zu
 Eine Schwelle für die Sicherheit (unter 90 % → `uncertain`) fängt nur 1–10 % davon ab. Deshalb gehört
 der Drift-Monitor in die Notiz.
 
-**Die LLM-Notiz** (`POST /explain`, [`api/llm.py`](src/ids/api/llm.py)): Ein lokales LLM
-(`llama3.2:3b` über Ollama, OpenAI-kompatibel) bekommt **nur die Ergebnisse der Modelle** – Typ, Familie,
+**Die LLM-Notiz** (`POST /explain`, [`api/llm.py`](src/ids/api/llm.py)): **Claude Opus 5.5** (Anthropic-SDK,
+niedriger Effort, serverseitiger Fallback bei einer Ablehnung durch die Sicherheitsfilter) bekommt
+**nur die Ergebnisse der Modelle** – Typ, Familie,
 Wahrscheinlichkeiten, die Merkmale, die am weitesten außerhalb des normalen Verkehrs liegen, und den
 Zustand des Drift-Monitors – und schreibt daraus drei Sätze für den Analysten. Das LLM entscheidet nicht,
 was der Angriff ist; es formuliert.
@@ -225,25 +235,110 @@ was der Angriff ist; es formuliert.
 }
 ```
 
-Jede Notiz muss **sechs Regeln** bestehen: den erkannten Typ nennen, keine andere Angriffsfamilie
+Jede Notiz muss **sieben Regeln** bestehen: den erkannten Typ nennen, keine andere Angriffsfamilie
 erwähnen, keine IP-Adressen, CVE-Nummern oder URLs erfinden, „Drift“ genau dann erwähnen, wenn der
-Monitor warnt, ohne Einleitung, höchstens 90 Wörter. Bricht sie eine Regel, ist das LLM zu langsam oder
+Monitor warnt, ohne Einleitung, höchstens 90 Wörter, reiner Text ohne HTML, Markdown oder Links. Bricht sie eine Regel, ist das LLM zu langsam oder
 nicht erreichbar, kommt eine **Notiz aus einer Vorlage** – die API scheitert nie am LLM. Prometheus
 zählt jedes Ergebnis (`ids_llm_requests_total{result}`), der Alarm `IdsLlmFallback` meldet Ausfälle.
 
-**Prompts werden gemessen wie Modelle** ([`ids.evaluate_llm`](src/ids/evaluate_llm.py), MLflow-Experiment
-`ids-llm-evaluation`, 26 Angriffs-Flows aller bekannten Typen):
+**KI-Sicherheit:** Prompt-Injection ist hier schon durch den Aufbau ausgeschlossen. Die API nimmt
+nur 83 Zahlen an (unbekannte Felder und Text → 422), der Prompt besteht nur aus Ergebnissen der eigenen
+Modelle, die vor jedem Aufruf gegen Allowlists geprüft werden, und das LLM hat keine Werkzeuge und
+entscheidet nichts. Seine Ausgabe gilt als nicht vertrauenswürdig: Steuer- und unsichtbare
+Unicode-Zeichen werden entfernt, HTML, Markdown und Links abgelehnt, die Startseite zeigt sie nur als
+Text an. Die vollständige Prüfung entlang der OWASP Top 10 für LLM-Anwendungen steht in
+[`SECURITY.md`](SECURITY.md#ki-sicherheit-owasp-top-10-für-llm-anwendungen-2025).
 
-| Prompt | Regeln bestanden | häufigster Verstoß | Latenz p50 / p95 |
-|---|---:|---|---|
-| v1 | **0 %** | Einleitung „Hier ist die Notiz …“ (26×), „Drift“ ohne Warnung (21×) | 5,1 s / 9,0 s |
-| v2 | **92 %** | 1× Typ nicht genannt, 1× Timeout → Vorlage | 4,4 s / 8,6 s |
+**Kosten im Griff:** Der Endpunkt ist öffentlich. Ein Budget in der API erlaubt höchstens 10 Claude-Notizen
+pro Minute und 300 pro Tag (`LLM_MAX_PER_MINUTE`, `LLM_MAX_PER_DAY`); darüber schreibt die API die
+Vorlage (`reason: "budget"`). Der API-Key liegt nur in `secrets.env` (lokal) bzw. auf dem Server, nie im
+Repository oder Image. Ohne Key oder offline funktioniert alles mit der Vorlage – oder mit einem lokalen
+LLM: `LLM_PROVIDER=openai` und `make llm` (Ollama, `llama3.2:3b`).
 
-Das kleine Modell hat das Wort „Drift“ aus dem Systemprompt einfach nachgeplappert. In v2 steht die
+**Prompts und LLMs werden gemessen wie Modelle** ([`ids.evaluate_llm`](src/ids/evaluate_llm.py),
+MLflow-Experiment `ids-llm-evaluation`, 26 Angriffs-Flows aller bekannten Typen):
+
+| LLM | Prompt | Regeln bestanden | häufigster Verstoß | Latenz p50 / p95 |
+|---|---|---:|---|---|
+| llama3.2:3b (lokal) | v1 | **0 %** | Einleitung „Hier ist die Notiz …“ (26×), „Drift“ ohne Warnung (21×) | 5,1 s / 9,0 s |
+| llama3.2:3b (lokal) | v2 | **92 %** | 1× Typ nicht genannt, 1× Timeout → Vorlage | 4,4 s / 8,6 s |
+| Claude Opus 5.5 | v2 | **77 %** | 6× zu lang (84–89 Wörter bei Grenze 90), sonst alles richtig | 3,1 s / 4,3 s |
+| Claude Opus 5.5 | **v3** | **100 %** | – (auch mit der siebten Regel „kein Markup“) | 2,4 s / 3,7 s |
+
+Das kleine lokale Modell hat das Wort „Drift“ aus dem Systemprompt einfach nachgeplappert. Claude hält
+sich an alle Fakten, schreibt aber lange Sätze – v3 setzt deshalb eine Grenze von 60 Wörtern und erreicht
+26 von 26. Jeder Prompt ist eine Version im Code (`LLM_PROMPT_VERSION`) und ein Run in MLflow. In v2 steht die
 Drift-Anweisung nur noch im Prompt, wenn der Monitor wirklich warnt, und eine Bereinigung im Code
 entfernt Einleitungen. Mit `LLM_PROMPT_VERSION=v1` lässt sich der alte Prompt jederzeit wieder messen.
 
 ![Grafana: Alarme nach Angriffsfamilie und LLM-Notizen](docs/images/grafana_family_llm.jpg)
+
+## CI/CD: vom Push in den Betrieb
+
+Jeder Push auf `main` durchläuft dieselbe Kette – und landet nur dann im Betrieb, wenn jeder Schritt grün
+ist ([`ci.yml`](.github/workflows/ci.yml)):
+
+```mermaid
+flowchart LR
+    PUSH([git push]) --> L[lint<br/>ruff inkl. Security-Regeln]
+    PUSH --> T[Tests<br/>Python 3.12–3.14]
+    PUSH --> S[security<br/>pip-audit · gitleaks]
+    L & T --> P[pipeline<br/>Rohdaten → Modell<br/>Byte-Vergleich · Quality Gate]
+    P & S --> I[image<br/>Modell aus CI ins Image<br/>Trivy · Smoke-Test · ghcr.io]
+    I --> D[deploy<br/>SSH → ids-deploy<br/>Rollback bei Fehler]
+    D --> X[Smoke-Test<br/>über das Internet]
+```
+
+- **Das Modell im Betrieb ist das Modell aus CI.** Der Job `pipeline` baut es aus den Rohdaten neu,
+  prüft die Ergebnisse Byte für Byte gegen den Commit und lässt es durch das Quality Gate. Der Job `image`
+  packt genau diese Dateien ins Image und taggt es mit dem Commit (`ghcr.io/maik-huebner/intrusion-detection-mlops:<sha>`).
+  Retraining als Git-Workflow: Wer `params.yaml` ändert (z. B. Donnerstag ins Training), bekommt nach dem
+  Merge automatisch ein neues, geprüftes Modell in den Betrieb.
+- **Deployment ohne Shell-Zugang:** Der SSH-Schlüssel in GitHub darf auf dem Server nur ein Skript
+  ausführen ([`deploy/ids-deploy`](deploy/ids-deploy), forced command), und das akzeptiert nur
+  `deploy <Commit auf main>`. Es holt das Image, startet den Stack neu und wartet, bis `/model` die neue
+  Revision meldet. Wird die neue Version nicht gesund, **startet es automatisch die vorherige wieder**.
+- **Nachweis über das Internet:** Der letzte Schritt ruft `https://…/model` auf und prüft, dass genau der
+  gepushte Commit antwortet, und dass `/metrics` von außen nicht erreichbar ist.
+
+Der Stack auf dem Server ([`deploy/compose.prod.yaml`](deploy/compose.prod.yaml)) teilt sich die Maschine
+mit anderen Seiten und ist entsprechend eng geschnitten:
+
+| Dienst | öffentlich | Härtung |
+|---|---|---|
+| nginx (Host) | TLS, Ratenlimit 20 Anfragen/s je IP, 12 MB je Anfrage | – |
+| Caddy | leitet `/` zur API, `/grafana/` zum Dashboard, `/metrics` → 404, Sicherheits-Header | Nicht-Root, schreibgeschützt |
+| API | `/docs`, `/predict`, `/explain`, `/drift`, `/model` | Nicht-Root, schreibgeschützt, keine Capabilities, 1 GB / 1 CPU |
+| Prometheus | nein | Netz ohne Internetzugang |
+| Grafana | nur lesend (anonym), Login abgeschaltet | Netz ohne Internetzugang, zufälliges Admin-Passwort |
+
+Welche Version läuft, zeigt `GET /model` (`revision` = Commit) und die Grafana-Kachel „Model version“
+(`CI <commit>` auf dem Server, `v<Version>` mit der Registry lokal).
+
+**Ende-zu-Ende geprüft (26.11.2026):**
+
+| Prüfung | Ergebnis |
+|---|---|
+| Push bis „läuft öffentlich“ | **9 min 38 s** (Commit `bf07245`: Tests, Pipeline, Gate, Image, Scan, Deploy, Smoke-Test) |
+| Rollback | Deployment eines Commits ohne Image → Skript meldet Fehler, vorherige Version läuft weiter |
+| Drift über das Internet | Replay Mittwoch: 100 % erkannt, kein Drift · Donnerstag: 0 % erkannt, **Drift 31 %**, im öffentlichen Dashboard sichtbar |
+| Härtung | HTTP → HTTPS, `/metrics` 404, Grafana-Login abgelehnt, `NaN` → 422, Ratenlimit (429 ab ~20 Anfragen/s) |
+| Deploy-Schlüssel | beliebiger Befehl, `;`-Anhang und Port-Weiterleitung abgelehnt |
+| Speicher auf dem Server | API 285 MB, Grafana 310 MB, Prometheus 70 MB, Proxy 50 MB (alle mit Limit) |
+
+## Sicherheit
+
+Das Projekt wurde vor dem öffentlichen Deployment auf Schwachstellen geprüft; Befunde, Maßnahmen und
+bewusst akzeptierte Risiken stehen in [`SECURITY.md`](SECURITY.md). Die wichtigsten Punkte:
+
+- **Gefunden und behoben:** Flows mit `NaN`/`Infinity` führten zu HTTP 500 (jetzt 422 ohne Echo der
+  Eingabe); ein öffentlicher `/explain` hätte beliebig viele kostenpflichtige LLM-Aufrufe erlaubt (jetzt
+  Budget); Grafanas Standard-Login wäre im Internet offen gewesen (jetzt abgeschaltet).
+- **Bei jedem Push geprüft:** bekannte Schwachstellen aller Pakete (`pip-audit`), unsichere Code-Muster
+  (Ruff-Regeln `S`), Geheimnisse in der gesamten Git-Historie (`gitleaks`), Schwachstellen im Image
+  (Trivy, blockiert das Deployment), alle Actions auf Commit-SHAs fixiert, Dependabot.
+- **Geheimnisse:** Der Claude-Key liegt nur in `secrets.env` bzw. auf dem Server (Rechte 600); der
+  Deploy-Schlüssel kann keine Shell öffnen; GHCR nutzt das kurzlebige Token des Workflows.
 
 ## Architektur
 
@@ -261,15 +356,16 @@ flowchart LR
     end
     subgraph "Docker Compose"
         REG[MLflow<br/>Tracking + Registry] -->|"@champion + Profil + Typ-Modell"| API[FastAPI<br/>/predict · /explain · /drift · /metrics]
-        API -->|Notiz| OL[Ollama<br/>llama3.2:3b]
+        API -->|Notiz| CL[Claude API<br/>Opus 5.5]
         API -->|scrape 5 s| PR[Prometheus<br/>Alarmregeln] --> GR[Grafana]
     end
     T -->|"make register"| REG
     F --> REG
     API --> U([SOC / Clients])
     subgraph "GitHub Actions"
-        CI[lint → Tests 3.12–3.14 → Pipeline auf echten Daten → Reproduzierbarkeit → Quality Gate]
+        CI[lint + Tests + Security → Pipeline auf echten Daten → Quality Gate → Image + Scan → Deploy]
     end
+    CI -->|"ghcr.io + SSH"| SRV[(Server<br/>nginx → Caddy → API, Grafana)]
 ```
 
 | Baustein | Werkzeug | Was es hier leistet |
@@ -282,9 +378,10 @@ flowchart LR
 | Quality Gate | `ids.quality_gate` | Erkennungsrate ≥ 98 %, Fehlalarmrate ≤ 0,5 %, F1 ≥ 0,98 – sonst keine Freigabe |
 | Serving | **FastAPI** + **Docker** | Validierung jedes Merkmals, Modell aus der Registry mit Rückfall auf das eingebaute Modell, Nicht-Root-Container |
 | Angriffstyp | zweites Modell (`family`) | Typ und Familie für jeden Alarm, „uncertain“ unter 90 % Sicherheit |
-| LLM-Notiz | **Ollama** + openai-Client | Notiz für Analysten aus den Modell-Ergebnissen, sechs Regeln, Vorlage als Rückfall, Prompt-Evaluation in MLflow |
+| LLM-Notiz | **Claude** (Anthropic-SDK), optional Ollama | Notiz für Analysten aus den Modell-Ergebnissen, sieben Regeln, Schutz vor Prompt-Injection, Vorlage als Rückfall, Budget, Prompt- und LLM-Evaluation in MLflow |
 | Monitoring | **Prometheus** + **Grafana** | goldene Signale, Alarmrate, Drift ohne Labels, Alarme nach Familie, LLM-Ergebnisse, sechs Alarmregeln |
-| CI | **GitHub Actions** | Lint, Tests auf drei Python-Versionen, komplette Pipeline auf den echten Daten, Byte-Vergleich der Ergebnisse, Quality Gate |
+| CI/CD | **GitHub Actions** + GHCR | Lint, Tests auf drei Python-Versionen, Sicherheitsprüfungen, komplette Pipeline auf den echten Daten, Byte-Vergleich, Quality Gate, Image mit Schwachstellen-Scan, automatisches Deployment mit Rollback |
+| Betrieb | **nginx** + **Caddy** auf einem Server | TLS (Let's Encrypt), Ratenlimit, gehärtete Container, öffentliche API und Dashboard, interne Metriken |
 
 ## Der Datensatz und warum die korrigierte Fassung
 
@@ -332,17 +429,20 @@ uv sync                              # Umgebung exakt nach uv.lock
 make data                            # 328 MB, mit SHA-256-Prüfung
 make pipeline                        # komplette Pipeline, ca. 1 Minute auf einem M4 Pro
 uv run dvc metrics show              # Ergebnisse
-make check                           # Lint und 93 Tests
+make check                           # Lint und 110 Tests
 ```
 
 ### Den Stack starten
 
 ```bash
-make stack                           # MLflow, API, Prometheus, Grafana, Ollama
-make llm                             # einmalig: llama3.2:3b laden (ca. 2 GB)
+# optional, für Claude-Notizen (sonst Vorlage): Key unsichtbar eingeben, landet nur in secrets.env
+umask 077 && read -rs "k?ANTHROPIC_API_KEY: " && printf 'ANTHROPIC_API_KEY=%s\n' "$k" > secrets.env && unset k
+make stack                           # MLflow, API, Prometheus, Grafana
 make register                        # Modell (Mo–Mi) in die Registry, wird @champion
 make rollout                         # API lädt den Champion
 ```
+
+(`read -rs "k?…"` ist zsh, in bash: `read -rsp "ANTHROPIC_API_KEY: " k`.)
 
 | Dienst | Adresse |
 |---|---|
@@ -353,20 +453,21 @@ make rollout                         # API lädt den Champion
 
 | Endpunkt | Zweck |
 |---|---|
+| `GET /` | Startseite: Zustand im Betrieb und drei echte Flows zum Ausprobieren (bekannter Angriff, neuer Angriff, normaler Verkehr) |
 | `GET /health` | läuft die API? (auch Docker-Healthcheck) |
-| `GET /model` | Modellversion, Quelle, Schwelle, Rückfall ja/nein, Drift-Monitoring an/aus |
+| `GET /model` | Modellversion, Commit (`revision`), Quelle, Schwelle, Rückfall ja/nein, Drift-Monitoring an/aus |
 | `POST /predict` | einen Flow bewerten (83 Merkmale, jedes mit Wertebereich geprüft); bei Alarm mit Angriffstyp |
 | `POST /predict/batch` | bis zu 10.000 Flows auf einmal |
 | `POST /explain` | einen Flow bewerten, Angriffstyp und Notiz für den Analysten (LLM oder Vorlage) |
 | `GET /drift` | aktueller Stand des Drift-Monitors |
-| `GET /metrics` | Metriken für Prometheus |
+| `GET /metrics` | Metriken für Prometheus (auf dem Server nicht öffentlich) |
 
 Die Doku unter `/docs` enthält als Beispiel einen echten SSH-Brute-Force-Flow aus dem Testdatensatz.
 
 ## Live-Demo in drei Befehlen
 
 ```bash
-make stack && make llm && make register      # Modell Mo–Mi als Champion (z. B. Version 1)
+make stack && make register                   # Modell Mo–Mi als Champion (z. B. Version 1)
 make retrain                                  # Modell Mo–Do als Experiment, wird Version 2 und @champion
 make demo BEFORE=1 AFTER=2                    # spielt die ganze Geschichte ab, ca. 4 Minuten
 ```
@@ -377,6 +478,10 @@ Notiz zu einem DDoS-Flow schreiben, wartet auf den Drift-Alarm, rollt das neue M
 lassen sich mit `make replay DAY=thursday` abspielen, eine Notiz zu einem echten Flow holt
 `make note DAY=friday LABEL=DDoS`. Der Ablauf für die Präsentation steht in
 [`docs/DEMO.md`](docs/DEMO.md).
+
+Auch gegen den Server: `API_URL=https://ids.178-104-83-110.sslip.io make replay DAY=thursday` – das
+Dashboard unter `/grafana/` zeigt danach den Drift-Alarm (das Modell im Betrieb ist das aus `main`,
+trainiert auf Montag bis Mittwoch).
 
 ## Projektstruktur
 
@@ -394,23 +499,26 @@ lassen sich mit `make replay DAY=thursday` abspielen, eine Notiz zu einem echten
 │   ├── replay.py · demo.py   echten Verkehr abspielen, Live-Demo
 │   ├── timeline.py           Zeitleiste aus Prometheus-Daten
 │   ├── evaluate_api.py       Latenz, Durchsatz, Robustheit der laufenden API
-│   └── evaluate_llm.py       Regel-Quote und Latenz der LLM-Notizen, Prompt-Vergleich
-├── tests/                    93 Unit-, API-, LLM- und Registry-Tests (synthetische Daten, kein Datensatz nötig)
+│   ├── evaluate_llm.py       Regel-Quote und Latenz der LLM-Notizen, Prompt- und LLM-Vergleich
+│   └── web.py                urlopen nur für http(s), für alle Kommandozeilen-Werkzeuge
+├── tests/                    110 Unit-, API-, LLM- und Registry-Tests (synthetische Daten, kein Datensatz nötig)
 ├── monitoring/               Prometheus-Konfiguration, Alarmregeln, Grafana-Dashboard
 ├── docker/                   Dockerfiles für API und MLflow
+├── deploy/                   Produktions-Stack, Caddy, nginx-vhost, Deploy-Skript (forced command)
 ├── reports/                  Berichte der Pipeline (versioniert, von CI geprüft)
 ├── docs/                     Demo-Ablauf, Bilder
 ├── dvc.yaml · params.yaml    Pipeline und Parameter
 ├── compose.yaml · Makefile
-├── PROJEKT.md                Projektsteckbrief
-└── .github/workflows/ci.yml
+├── PROJEKT.md · SECURITY.md  Projektsteckbrief, Sicherheitsanalyse
+└── .github/                  CI/CD-Workflow, Dependabot
 ```
 
 ## Qualität und Reproduzierbarkeit
 
-- **93 Tests** für jede Datenregel, die Metriken, das Quality Gate, den Drift-Monitor, das Typ-Modell,
-  die LLM-Regeln, die API (inklusive `/metrics`, Drift-Erkennung, `/explain` mit simuliertem LLM, das gut
-  antwortet, halluziniert oder ausfällt, und Rückfall bei nicht erreichbarer Registry) und die Registry
+- **110 Tests** für jede Datenregel, die Metriken, das Quality Gate, den Drift-Monitor, das Typ-Modell,
+  die LLM-Regeln, den Claude-Aufruf (mit simuliertem Client, inklusive Ablehnung), das Budget, die API
+  (inklusive `/metrics`, Drift-Erkennung, `NaN`-Abwehr, `/explain` mit simuliertem LLM, das gut
+  antwortet, halluziniert, ausfällt oder über dem Budget liegt, und Rückfall bei nicht erreichbarer Registry) und die Registry
   (Champion/Challenger, Rollback, skops-Rundweg von Detektor und Typ-Modell gegen einen temporären
   MLflow-Speicher). Sie laufen
   mit synthetischen Daten im echten Schema und brauchen den 328-MB-Datensatz nicht.
@@ -448,8 +556,13 @@ Dinge, die erst beim Bauen aufgefallen sind – und für die die MLOps-Werkzeuge
   beim Lesen der Notizen fielen Einleitungen und erfundene Drift-Hinweise auf. Mit schärferen Regeln
   sank v1 auf 0 %, v2 erreicht 92 %.
 - **Ein lokales LLM braucht Speicher.** Unter Speicherdruck (MLflow mit 4 Workern, Ollama, Grafana in
-  8 GB) lief eine Notiz in den Timeout. Die Vorlage sprang ein, wie geplant; MLflow läuft jetzt mit
-  2 Workern.
+  8 GB) lief eine Notiz in den Timeout. Die Vorlage sprang ein, wie geplant. Für den Server, der auch
+  andere Seiten betreibt, war das ein Grund für Claude über die API: kein Modell im Speicher, nur ein
+  HTTP-Aufruf mit Budget.
+- **Die Sicherheitsanalyse hat echte Fehler gefunden,** die kein Test abgedeckt hatte: `NaN` im Request
+  ergab HTTP 500, weil FastAPI den Wert in die Fehlermeldung zurückschreiben wollte. Und Härtung hat
+  Nebenwirkungen: Mit `cap_drop: ALL` startete Caddy nicht mehr, weil die Programmdatei eine
+  Capability trägt – erst lokal mit dem Produktions-Stack getestet, dann ausgerollt.
 
 ## Grenzen und nächste Schritte
 
@@ -460,10 +573,12 @@ Dinge, die erst beim Bauen aufgefallen sind – und für die die MLOps-Werkzeuge
   auslösen. Der Alarm ist der Anlass, genauer hinzusehen, nicht automatisch neu zu trainieren.
 - **Retraining braucht Labels.** Das Projekt nimmt an, dass die Donnerstagsdaten nach dem Alarm gelabelt
   werden. In der Praxis ist das der teuerste Schritt.
-- **LLM-Notizen dauern auf der CPU 4–9 Sekunden** und sind gut für einzelne Alarme, nicht für jeden Flow.
-  Kleine Modelle formulieren manchmal holprig; die Regeln prüfen Fakten, nicht Stil.
-- **Nächste Schritte:** Alertmanager für Benachrichtigungen, ein Retraining-Workflow in GitHub Actions,
-  der auf den Drift-Alarm reagiert, ein Feedback-Endpunkt für bestätigte Vorfälle (verzögerte Labels als
+- **LLM-Notizen sind für einzelne Alarme gedacht, nicht für jeden Flow** (Latenz, Kosten). Die Regeln
+  prüfen Fakten, nicht Stil.
+- **Ein Server, kein Cluster:** Für echten Betrieb bräuchte es mindestens zwei Instanzen, eine eigene
+  Domain und Authentifizierung je Sensor (siehe [`SECURITY.md`](SECURITY.md)).
+- **Nächste Schritte:** Alertmanager für Benachrichtigungen, ein Retraining-Workflow, der auf den
+  Drift-Alarm reagiert und einen PR mit geänderter `params.yaml` öffnet (den Rest erledigt schon CI/CD), ein Feedback-Endpunkt für bestätigte Vorfälle (verzögerte Labels als
   Metrik), Shadow-Deployment des Challengers vor der Promotion.
 
 ## Quellen

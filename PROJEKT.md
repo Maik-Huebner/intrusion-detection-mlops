@@ -4,6 +4,7 @@
 **Projekt:** Intrusion Detection mit MLOps – ein Angriffserkenner, der merkt, wenn er veraltet
 **Typ:** ML-Anwendung
 **Repository:** https://github.com/Maik-Huebner/intrusion-detection-mlops
+**Live:** https://ids.178-104-83-110.sslip.io/ (Startseite) · https://ids.178-104-83-110.sslip.io/docs (API) · https://ids.178-104-83-110.sslip.io/grafana/ (Dashboard)
 
 ## Problem und Ziel
 
@@ -60,7 +61,7 @@ Freitag nach dem Retraining 99,1 % statt 37,3 %.
 - [x] Tests mit pytest
 - [x] CI mit GitHub Actions
 - [x] Dockerfile
-- [x] Deployment (Docker Compose)
+- [x] Deployment (Docker Compose lokal; automatisch per CI/CD auf einen öffentlichen Server)
 
 ## Zusätzliche Ziele
 
@@ -70,8 +71,10 @@ Freitag nach dem Retraining 99,1 % statt 37,3 %.
 - [x] Monitoring mit `/metrics`, Prometheus und Grafana (sechs Alarmregeln, fertiges Dashboard)
 - [x] Drift-Prüfung ohne Labels: offline als DVC-Stufe, live in der API
 - [x] Evaluation der API (Latenz p50/p95/p99, Durchsatz, Robustheit) mit MLflow
-- [x] LLM mit Ollama: Notiz für Analysten aus den Modell-Ergebnissen, sechs Regeln, Vorlage als Fallback, Prompt-Evaluation v1 → v2 (0 % → 92 %) in MLflow
+- [x] LLM-Notiz für Analysten mit Claude (Anthropic-SDK) aus den Modell-Ergebnissen, sieben Regeln, Schutz vor Prompt-Injection (OWASP LLM Top 10), Vorlage als Fallback, Budget gegen Kosten; Prompt- und LLM-Evaluation in MLflow (lokales llama3.2:3b v1 → v2: 0 % → 92 %; Claude v2 → v3: 77 % → 100 %)
 - [x] Zweites Modell für den Angriffstyp (99,99 % auf bekannten Typen)
+- [x] Continuous Deployment: jeder Push auf `main` → Tests, Pipeline, Quality Gate, Image mit Schwachstellen-Scan, Deployment auf den Server mit automatischem Rollback und Smoke-Test über das Internet
+- [x] Sicherheitsanalyse ([`SECURITY.md`](SECURITY.md)): drei Befunde behoben, Prüfungen in CI (pip-audit, gitleaks, Ruff-Security-Regeln, Trivy), gehärtete Container, Deploy-Schlüssel ohne Shell
 
 ## Risiken
 
@@ -80,7 +83,9 @@ Freitag nach dem Retraining 99,1 % statt 37,3 %.
 | Datensatz mit 2,1 Mio. Zeilen ist für CI zu groß oder zu langsam | Rohdaten im CI-Cache; Unit-Tests laufen auf synthetischen Flows im echten Schema |
 | Bekannte Fehler im Original-CIC-IDS2017 (falsche Labels, kaputte Flows) | korrigierte Fassung von 2022, eigene Validierungsstufe in der Pipeline |
 | Ergebnis „zu gut, um wahr zu sein“ (100 % auf Testdaten) | zeitbasierter Split statt Zufall, ID-Spalten entfernt, Duplikate vor dem Split entfernt |
-| Live-Demo fällt aus (Netz, Docker) | Screenshots von Grafana, MLflow und API in der Präsentation |
+| Live-Demo fällt aus (Netz, Docker) | Server-Variante (läuft ohne Laptop-Stack), sonst Screenshots von Grafana, MLflow und API in der Präsentation |
+| Öffentlicher LLM-Endpunkt verursacht Kosten | Budget je Minute und Tag in der API, Ratenlimit in nginx, Ausgabenlimit in der Anthropic Console |
+| Deployment bricht den Server oder die anderen Seiten | Speicher- und CPU-Limits je Container, automatischer Rollback, nur ein eigener nginx-vhost |
 
 ## Plan
 
@@ -89,6 +94,5 @@ Freitag nach dem Retraining 99,1 % statt 37,3 %.
 | vorab (13.11.) | Repository, Daten, DVC-Pipeline, Training, Quality Gate, API, Dockerfile, CI |
 | vorab (22.11.) | Repository öffentlich, CI grün, Registry gegen MLflow-Server getestet, Monitoring, Drift-Prüfung, Live-Demo, Evaluation der API |
 | vorab (22.11., Teil 2) | Angriffstyp-Modell, LLM-Notiz mit Regeln und Fallback, Prompt-Evaluation |
-| 22–23 | Feinschliff, Präsentation, Demo üben |
-| 24 | README fertig, Präsentation, **Abgabe**: Git-Tag `abgabe` |
-| 25 | Präsentation (10 Minuten + 5 Minuten Fragen) |
+| 26.11. | Claude statt lokalem LLM, Sicherheitsanalyse und Härtung, CI/CD bis auf den Server, Ende-zu-Ende-Test; **Abgabe bis 16 Uhr**: Git-Tag `abgabe` |
+| 27.11. | Präsentation (10 Minuten + 5 Minuten Fragen) |

@@ -28,7 +28,7 @@ import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ids import __version__, schema
@@ -87,6 +87,13 @@ def _settings() -> tuple[float, dict, float]:
     return threshold, DRIFT_DEFAULTS | params.get("drift", {}), min_confidence
 
 
+def _display_version() -> str:
+    """Short label for dashboards: registry version, or the commit of the CI-built image."""
+    if state["version"] != "file":
+        return f"v{state['version']}"
+    return f"CI {state['revision'][:7]}" if state["revision"] != "dev" else "baked-in"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     state.update(_load_model())  # once at startup, not per request
@@ -106,6 +113,7 @@ async def lifespan(_: FastAPI):
             "version": state["version"],
             "fallback": str(state["fallback"]).lower(),
             "revision": state["revision"],
+            "display": _display_version(),
         }  # fmt: skip
     )
     log.info("serving %s (version %s), drift monitoring %s, attack types %s, LLM notes %s", state["source"],
@@ -172,6 +180,23 @@ def _predict(flows: list) -> list[Prediction]:
             predictions[i].type_confidence = round(float(conf), 4)
             m.ALARMS_BY_FAMILY.labels(family).inc()
     return predictions
+
+
+_UI_DIR = Path(__file__).parent
+
+
+@app.get("/", include_in_schema=False)
+def index() -> HTMLResponse:
+    """Start page: live status and three real example flows to try (no external resources)."""
+    examples = (_UI_DIR / "examples.json").read_text(encoding="utf-8").strip().replace("</", "<\\/")
+    page = (_UI_DIR / "ui.html").read_text(encoding="utf-8").replace("__EXAMPLES__", examples)
+    return HTMLResponse(page, headers={"Content-Security-Policy": _CSP})
+
+
+_CSP = (
+    "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; "
+    "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
 
 
 @app.get("/health", tags=["info"])
